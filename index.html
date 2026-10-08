@@ -38,6 +38,17 @@ td.coin span{display:block;font-size:12px;color:var(--gri)}
 .flash-up{animation:fu .8s}.flash-dn{animation:fd .8s}
 @keyframes fu{from{background:var(--yesA)}to{background:transparent}}
 @keyframes fd{from{background:var(--kirA)}to{background:transparent}}
+.grafik{background:var(--kart);border-radius:16px;padding:14px 16px 8px;margin-bottom:14px}
+.gUst{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.gUst .baslik{font-weight:700;flex:1;min-width:140px}
+.gUst .baslik small{display:block;font-weight:500;font-size:13px}
+.periyot{display:flex;gap:4px;flex-wrap:wrap}
+.periyot button,.geri{border:1px solid var(--cizgi);background:#fff;border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer}
+.periyot button.sec{background:var(--yazi);color:#fff;border-color:var(--yazi)}
+.geri{display:none}
+#grafik{height:320px}
+tr.secili td{background:#eef3fd}
+#govde tr{cursor:pointer}
 .ayar{margin-top:18px;background:var(--kart);border-radius:16px;padding:14px 18px}
 .ayar summary{cursor:pointer;font-weight:600}
 textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px solid #d5d9e0;border-radius:10px;font:13px/1.4 ui-monospace,Menlo,monospace}
@@ -58,6 +69,16 @@ textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px soli
   <div class="kart"><div class="etk">Son 24 saat</div><div class="buyuk r" id="degUsd">–</div><div class="alt r" id="degYuz">–</div></div>
 </div>
 
+<div class="grafik">
+  <div class="gUst">
+    <div class="baslik" id="gBaslik">Portföy değeri<small id="gDegisim">–</small></div>
+    <button class="geri" id="geri" onclick="secimYap(null)">← Toplam</button>
+    <div class="periyot" id="periyot"></div>
+  </div>
+  <div id="grafik"></div>
+  <div class="not" style="margin-top:4px">Geçmiş, bugünkü adetlerin o tarihte de elde olduğu varsayımıyla çizilir. Bir coine dokun: o coinin grafiği.</div>
+</div>
+
 <div class="tablo"><table>
   <thead><tr><th>Coin</th><th class="gizle">Adet</th><th>Fiyat</th><th>24s</th><th>Değer</th><th class="gizle">Pay</th></tr></thead>
   <tbody id="govde"></tbody>
@@ -71,6 +92,7 @@ textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px soli
   <div class="not">Başka bir cihazda (telefon) bir kez bu linki aç; o cihaz da portföyü hatırlar: <a id="link" href="#">link</a></div>
 </details>
 
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 const LS = "investingFormul";
 const fmtUsd = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"USD", currencyDisplay:"narrowSymbol", maximumFractionDigits:0 });
@@ -130,7 +152,7 @@ function ciz(){
     const yuz = x.o ? (x.p / x.o - 1) * 100 : null;
     const pay = top ? x.deger / top * 100 : 0;
     const yon = onceki[x.sym] == null || x.p == null ? "" : x.p > onceki[x.sym] ? "flash-up" : x.p < onceki[x.sym] ? "flash-dn" : "";
-    return `<tr class="${yon}">
+    return `<tr class="${yon} ${secili===x.sym?"secili":""}" onclick="secimYap('${x.sym}')">
       <td class="coin"><b>${ad}</b><span>${x.adet.toLocaleString("fr-FR")} adet</span></td>
       <td class="gizle r">${x.adet.toLocaleString("fr-FR")}</td>
       <td class="r">${x.p == null ? "…" : fiyatYaz(x.p) + " $"}</td>
@@ -147,6 +169,7 @@ function ciz(){
   const el = document.getElementById("degUsd");
   el.textContent = (top24 >= 0 ? "+" : "") + fmtUsd.format(top24); el.className = "buyuk r " + (top24 >= 0 ? "arti" : "eksi");
   document.getElementById("degYuz").textContent = (yuz24 >= 0 ? "+" : "") + yuz24.toFixed(2) + "% (Binance 24 saatlik)";
+  canliNokta();
 }
 
 let cizZaman = null;
@@ -181,11 +204,100 @@ function canli(){
   ws.onerror = () => ws.close();
 }
 
+// ============================================================================
+//  GRAFIK  (Binance mumlari; bugunku adetlerle gecmis deger)
+// ============================================================================
+const PERIYOT = [
+  { ad:"1G", iv:"15m", n:96,  sn:900 },
+  { ad:"1H", iv:"1h",  n:168, sn:3600 },
+  { ad:"1A", iv:"4h",  n:180, sn:14400 },
+  { ad:"3A", iv:"1d",  n:90,  sn:86400 },
+  { ad:"1Y", iv:"1d",  n:365, sn:86400 },
+  { ad:"Tümü", iv:"1w", n:500, sn:604800 },
+];
+let periyot = (()=>{ try { return localStorage.getItem("investingPeriyot") || "1A"; } catch(e){ return "1A"; } })();
+let secili = null;            // null = toplam, yoksa "ETHUSDT"
+let mumlar = {};              // sym -> Map(zaman -> kapanis)
+let chart = null, seri = null, sonZaman = null, ilkDeger = null;
+
+function periyotCiz(){
+  document.getElementById("periyot").innerHTML = PERIYOT.map(p =>
+    `<button class="${p.ad===periyot?"sec":""}" onclick="periyotSec('${p.ad}')">${p.ad}</button>`).join("");
+}
+function periyotSec(ad){ periyot = ad; try { localStorage.setItem("investingPeriyot", ad); } catch(e){} periyotCiz(); grafikYukle(); }
+function secimYap(sym){ secili = sym; document.getElementById("geri").style.display = sym ? "inline-block" : "none"; ciz(); grafikVeri(); }
+
+function grafikKur(){
+  if (chart || !window.LightweightCharts) return;
+  const el = document.getElementById("grafik");
+  chart = LightweightCharts.createChart(el, {
+    layout: { background: { color: "transparent" }, textColor: "#6f7888", fontSize: 12 },
+    grid: { vertLines: { visible: false }, horzLines: { color: "#eef0f4" } },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, timeVisible: true },
+    crosshair: { mode: 0 },
+    localization: { priceFormatter: v => v >= 1000 ? Math.round(v).toLocaleString("fr-FR") + " $" : v.toLocaleString("fr-FR", { maximumFractionDigits: 4 }) + " $" },
+    handleScroll: false, handleScale: false,
+  });
+  seri = chart.addAreaSeries({ lineColor: "#2f6be0", topColor: "rgba(47,107,224,.25)", bottomColor: "rgba(47,107,224,0)", lineWidth: 2, priceLineVisible: false });
+  new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })).observe(el);
+}
+
+async function grafikYukle(){
+  grafikKur(); if (!chart || !liste.length) return;
+  const p = PERIYOT.find(x => x.ad === periyot);
+  document.getElementById("gDegisim").textContent = "yükleniyor…";
+  try {
+    const sonuc = await Promise.all(liste.map(x =>
+      fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=${p.iv}&limit=${Math.min(p.n, 1000)}`).then(r => r.json())));
+    mumlar = {};
+    liste.forEach((x, i) => { const m = new Map(); if (Array.isArray(sonuc[i])) for (const k of sonuc[i]) m.set(k[0] / 1000, +k[4]); mumlar[x.sym] = m; });
+    grafikVeri();
+  } catch (e) { document.getElementById("gDegisim").textContent = "Grafik alınamadı"; }
+}
+
+function grafikVeri(){
+  if (!seri) return;
+  const semboller = secili ? [secili] : liste.map(x => x.sym);
+  const adet = Object.fromEntries(liste.map(x => [x.sym, x.adet]));
+  // tum sembollerde ortak zamanlar (yeni listelenen coin varsa onun basindan itibaren)
+  let zamanlar = null;
+  for (const s of semboller) { const z = new Set((mumlar[s] || new Map()).keys()); zamanlar = zamanlar ? new Set([...zamanlar].filter(t => z.has(t))) : z; }
+  const tlist = [...(zamanlar || [])].sort((a, b) => a - b);
+  const veri = tlist.map(t => ({ time: t, value: semboller.reduce((s, sym) => s + mumlar[sym].get(t) * adet[sym], 0) }));
+  seri.setData(veri);
+  chart.timeScale().fitContent();
+  sonZaman = veri.length ? veri[veri.length - 1].time : null;
+  ilkDeger = veri.length ? veri[0].value : null;
+  const ad = secili ? secili.replace(/USDT$|USDC$/, "") + " değeri" : "Portföy değeri";
+  document.getElementById("gBaslik").firstChild.textContent = ad;
+  canliNokta();
+}
+
+// canli fiyatla grafigin son noktasini guncelle
+function canliNokta(){
+  if (!seri || sonZaman == null || ilkDeger == null) return;
+  const semboller = secili ? [secili] : liste.map(x => x.sym);
+  if (semboller.some(s => fiyat[s] == null)) return;
+  const deger = semboller.reduce((s, sym) => s + fiyat[sym] * liste.find(x => x.sym === sym).adet, 0);
+  const p = PERIYOT.find(x => x.ad === periyot);
+  const simdi = Math.floor(Date.now() / 1000);
+  const t = simdi >= sonZaman + p.sn ? sonZaman + Math.floor((simdi - sonZaman) / p.sn) * p.sn : sonZaman;
+  sonZaman = t;
+  seri.update({ time: t, value: deger });
+  const yuz = (deger / ilkDeger - 1) * 100, fark = deger - ilkDeger;
+  const el = document.getElementById("gDegisim");
+  el.textContent = `${periyot}: ${fark >= 0 ? "+" : ""}${fmtUsd.format(fark)} (${yuz >= 0 ? "+" : ""}${yuz.toFixed(2)}%)`;
+  el.className = fark >= 0 ? "arti" : "eksi";
+}
+
 async function baslat(){
   document.getElementById("formul").value = formul;
   linkGuncelle(); ciz();
   if (!liste.length) { durum("", "Portföy boş"); return; }
+  periyotCiz();
   await anlik(); canli();
+  grafikYukle();
 }
 setInterval(() => { if (!ws || ws.readyState !== 1) anlik(); }, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) anlik(); });
