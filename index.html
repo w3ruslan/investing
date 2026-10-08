@@ -68,7 +68,7 @@ textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px soli
   <div class="not">TradingView formülünü yapıştır (örnek: <code>0.5*BINANCE:BTCUSDT+10*BINANCE:SOLUSDT</code>). Adetler sitenin koduna yazılmaz; bu tarayıcıda ve linkinin # kısmında saklanır.</div>
   <textarea id="formul" spellcheck="false"></textarea>
   <button class="btn" onclick="formulKaydet()">Kaydet</button>
-  <div class="not">Bu linki kaydet, her cihazda aynı portföyü açar: <a id="link" href="#">link</a></div>
+  <div class="not">Başka bir cihazda (telefon) bir kez bu linki aç; o cihaz da portföyü hatırlar: <a id="link" href="#">link</a></div>
 </details>
 
 <script>
@@ -89,7 +89,14 @@ function formulOku(s){
   return out;
 }
 
-let formul = decodeURIComponent(location.hash.slice(1)) || (()=>{ try { return localStorage.getItem(LS) || ""; } catch(e){ return ""; } })();
+// formul: linkin # kismindan gelirse bu cihaza kaydedilir ve adres temizlenir; sonra duz linkle de acilir
+let formul = (()=>{ try { return localStorage.getItem(LS) || ""; } catch(e){ return ""; } })();
+const hashFormul = decodeURIComponent(location.hash.slice(1));
+if (hashFormul && formulOku(hashFormul).length) {
+  formul = hashFormul;
+  try { localStorage.setItem(LS, formul); } catch(e){}
+  history.replaceState(null, "", location.pathname);
+}
 let liste = formulOku(formul);
 const fiyat = {}, acilis = {}, onceki = {};
 let eurUsd = null, ws = null;
@@ -103,7 +110,6 @@ function formulKaydet(){
   formul = document.getElementById("formul").value.trim();
   liste = formulOku(formul);
   try { localStorage.setItem(LS, formul); } catch(e){}
-  history.replaceState(null, "", "#" + encodeURIComponent(formul));
   linkGuncelle(); baslat();
 }
 
