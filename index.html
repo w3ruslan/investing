@@ -206,6 +206,8 @@ function canli(){
 
 // ============================================================================
 //  GRAFIK  (Binance mumlari; bugunku adetlerle gecmis deger)
+//  Toplam portfoy mumu: acilis/kapanis kesin (adet x fiyat toplami);
+//  igneler yaklasik (her coinin tepe/dibi ayni anda olmayabilir).
 // ============================================================================
 const PERIYOT = [
   { ad:"1G", iv:"15m", n:96,  sn:900 },
@@ -215,32 +217,51 @@ const PERIYOT = [
   { ad:"1Y", iv:"1d",  n:365, sn:86400 },
   { ad:"Tümü", iv:"1w", n:500, sn:604800 },
 ];
-let periyot = (()=>{ try { return localStorage.getItem("investingPeriyot") || "1A"; } catch(e){ return "1A"; } })();
-let secili = null;            // null = toplam, yoksa "ETHUSDT"
-let mumlar = {};              // sym -> Map(zaman -> kapanis)
-let chart = null, seri = null, sonZaman = null, ilkDeger = null;
+const okuLS = (k, v) => { try { return localStorage.getItem(k) || v; } catch(e){ return v; } };
+const yazLS = (k, v) => { try { localStorage.setItem(k, v); } catch(e){} };
+let periyot = okuLS("investingPeriyot", "1A");
+let tip = okuLS("investingTip", "mum");          // "mum" | "cizgi"
+let secili = null;
+let mumlar = {};                                  // sym -> Map(zaman -> [o,h,l,c])
+let chart = null, mumSeri = null, cizgiSeri = null, son = null, ilkDeger = null;
 
 function periyotCiz(){
-  document.getElementById("periyot").innerHTML = PERIYOT.map(p =>
-    `<button class="${p.ad===periyot?"sec":""}" onclick="periyotSec('${p.ad}')">${p.ad}</button>`).join("");
+  document.getElementById("periyot").innerHTML =
+    `<button class="${tip==="mum"?"sec":""}" onclick="tipSec('mum')" title="Mum grafiği">Mum</button>` +
+    `<button class="${tip==="cizgi"?"sec":""}" onclick="tipSec('cizgi')" title="Çizgi grafiği" style="margin-right:8px">Çizgi</button>` +
+    PERIYOT.map(p => `<button class="${p.ad===periyot?"sec":""}" onclick="periyotSec('${p.ad}')">${p.ad}</button>`).join("");
 }
-function periyotSec(ad){ periyot = ad; try { localStorage.setItem("investingPeriyot", ad); } catch(e){} periyotCiz(); grafikYukle(); }
+function periyotSec(ad){ periyot = ad; yazLS("investingPeriyot", ad); periyotCiz(); grafikYukle(); }
+function tipSec(t){ tip = t; yazLS("investingTip", t); periyotCiz(); tipUygula(); }
+function tipUygula(){
+  if (!mumSeri) return;
+  mumSeri.applyOptions({ visible: tip === "mum" });
+  cizgiSeri.applyOptions({ visible: tip === "cizgi" });
+}
 function secimYap(sym){ secili = sym; document.getElementById("geri").style.display = sym ? "inline-block" : "none"; ciz(); grafikVeri(); }
 
 function grafikKur(){
   if (chart || !window.LightweightCharts) return;
   const el = document.getElementById("grafik");
   chart = LightweightCharts.createChart(el, {
-    layout: { background: { color: "transparent" }, textColor: "#6f7888", fontSize: 12 },
-    grid: { vertLines: { visible: false }, horzLines: { color: "#eef0f4" } },
+    layout: { background: { color: "#ffffff" }, textColor: "#555", fontSize: 12 },
+    grid: { vertLines: { color: "#f2f2f2" }, horzLines: { color: "#f2f2f2" } },
     rightPriceScale: { borderVisible: false },
-    timeScale: { borderVisible: false, timeVisible: true },
-    crosshair: { mode: 0 },
+    timeScale: { borderVisible: false, timeVisible: true, rightOffset: 2, fixLeftEdge: true, fixRightEdge: true },
+    crosshair: { mode: 0, vertLine: { color: "#2f6be0", width: 1, style: 0 }, horzLine: { color: "#2f6be0", width: 1, style: 0 } },
     localization: { priceFormatter: v => v >= 1000 ? Math.round(v).toLocaleString("fr-FR") + " $" : v.toLocaleString("fr-FR", { maximumFractionDigits: 4 }) + " $" },
     handleScroll: false, handleScale: false,
   });
-  seri = chart.addAreaSeries({ lineColor: "#2f6be0", topColor: "rgba(47,107,224,.25)", bottomColor: "rgba(47,107,224,0)", lineWidth: 2, priceLineVisible: false });
-  new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })).observe(el);
+  const ortak = { priceLineVisible: true, priceLineStyle: 2, priceLineWidth: 1, priceLineColor: "#222", lastValueVisible: true };
+  mumSeri = chart.addCandlestickSeries({
+    ...ortak,
+    upColor: "#2ecc40", downColor: "#ff2a1a",
+    borderUpColor: "#1f9d2e", borderDownColor: "#c81e10",
+    wickUpColor: "#555", wickDownColor: "#555",
+  });
+  cizgiSeri = chart.addAreaSeries({ ...ortak, lineColor: "#2f6be0", topColor: "rgba(47,107,224,.25)", bottomColor: "rgba(47,107,224,0)", lineWidth: 2 });
+  tipUygula();
+  new ResizeObserver(() => { chart.applyOptions({ width: el.clientWidth, height: el.clientHeight }); chart.timeScale().fitContent(); }).observe(el);
 }
 
 async function grafikYukle(){
@@ -251,40 +272,48 @@ async function grafikYukle(){
     const sonuc = await Promise.all(liste.map(x =>
       fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=${p.iv}&limit=${Math.min(p.n, 1000)}`).then(r => r.json())));
     mumlar = {};
-    liste.forEach((x, i) => { const m = new Map(); if (Array.isArray(sonuc[i])) for (const k of sonuc[i]) m.set(k[0] / 1000, +k[4]); mumlar[x.sym] = m; });
+    liste.forEach((x, i) => { const m = new Map(); if (Array.isArray(sonuc[i])) for (const k of sonuc[i]) m.set(k[0] / 1000, [+k[1], +k[2], +k[3], +k[4]]); mumlar[x.sym] = m; });
     grafikVeri();
   } catch (e) { document.getElementById("gDegisim").textContent = "Grafik alınamadı"; }
 }
 
 function grafikVeri(){
-  if (!seri) return;
+  if (!mumSeri) return;
   const semboller = secili ? [secili] : liste.map(x => x.sym);
   const adet = Object.fromEntries(liste.map(x => [x.sym, x.adet]));
-  // tum sembollerde ortak zamanlar (yeni listelenen coin varsa onun basindan itibaren)
   let zamanlar = null;
   for (const s of semboller) { const z = new Set((mumlar[s] || new Map()).keys()); zamanlar = zamanlar ? new Set([...zamanlar].filter(t => z.has(t))) : z; }
   const tlist = [...(zamanlar || [])].sort((a, b) => a - b);
-  const veri = tlist.map(t => ({ time: t, value: semboller.reduce((s, sym) => s + mumlar[sym].get(t) * adet[sym], 0) }));
-  seri.setData(veri);
+  const veri = tlist.map(t => {
+    let o = 0, h = 0, l = 0, c = 0;
+    for (const sym of semboller) { const [a, b, d, e] = mumlar[sym].get(t); const q = adet[sym]; o += a*q; h += b*q; l += d*q; c += e*q; }
+    return { time: t, open: o, high: h, low: l, close: c };
+  });
+  mumSeri.setData(veri);
+  cizgiSeri.setData(veri.map(v => ({ time: v.time, value: v.close })));
   chart.timeScale().fitContent();
-  sonZaman = veri.length ? veri[veri.length - 1].time : null;
-  ilkDeger = veri.length ? veri[0].value : null;
-  const ad = secili ? secili.replace(/USDT$|USDC$/, "") + " değeri" : "Portföy değeri";
-  document.getElementById("gBaslik").firstChild.textContent = ad;
+  son = veri.length ? { ...veri[veri.length - 1] } : null;
+  ilkDeger = veri.length ? veri[0].open : null;
+  document.getElementById("gBaslik").firstChild.textContent = secili ? secili.replace(/USDT$|USDC$/, "") + " değeri" : "Portföy değeri";
   canliNokta();
 }
 
-// canli fiyatla grafigin son noktasini guncelle
+// canli fiyatla son mumu guncelle (yeni periyoda gecildiyse yeni mum ac)
 function canliNokta(){
-  if (!seri || sonZaman == null || ilkDeger == null) return;
+  if (!mumSeri || !son || ilkDeger == null) return;
   const semboller = secili ? [secili] : liste.map(x => x.sym);
   if (semboller.some(s => fiyat[s] == null)) return;
   const deger = semboller.reduce((s, sym) => s + fiyat[sym] * liste.find(x => x.sym === sym).adet, 0);
   const p = PERIYOT.find(x => x.ad === periyot);
   const simdi = Math.floor(Date.now() / 1000);
-  const t = simdi >= sonZaman + p.sn ? sonZaman + Math.floor((simdi - sonZaman) / p.sn) * p.sn : sonZaman;
-  sonZaman = t;
-  seri.update({ time: t, value: deger });
+  if (simdi >= son.time + p.sn) {
+    const t = son.time + Math.floor((simdi - son.time) / p.sn) * p.sn;
+    son = { time: t, open: son.close, high: Math.max(son.close, deger), low: Math.min(son.close, deger), close: deger };
+  } else {
+    son.close = deger; son.high = Math.max(son.high, deger); son.low = Math.min(son.low, deger);
+  }
+  mumSeri.update({ ...son });
+  cizgiSeri.update({ time: son.time, value: deger });
   const yuz = (deger / ilkDeger - 1) * 100, fark = deger - ilkDeger;
   const el = document.getElementById("gDegisim");
   el.textContent = `${periyot}: ${fark >= 0 ? "+" : ""}${fmtUsd.format(fark)} (${yuz >= 0 ? "+" : ""}${yuz.toFixed(2)}%)`;
