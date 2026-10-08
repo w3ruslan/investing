@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f5f8">
+<meta name="robots" content="noindex">
+<title>Investing</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{--bg:#f4f5f8;--kart:#fff;--yazi:#161c27;--gri:#6f7888;--acik:#a3abb8;--cizgi:#e8ebf0;--mavi:#2f6be0;--kir:#d23b3b;--yes:#15894c;--yesA:#e7f6ee;--kirA:#fdeeee}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--yazi);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:0 clamp(16px,2.5vw,40px) 40px}
+.r{font-variant-numeric:tabular-nums}
+.ust{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 0 14px}
+.ust h1{margin:0;font-size:22px;flex:1}
+.durum{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gri)}
+.nokta{width:8px;height:8px;border-radius:50%;background:var(--acik)}
+.nokta.ok{background:#22b066}.nokta.bekle{background:#f0b429}.nokta.hata{background:var(--kir)}
+.ozet{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px}
+.kart{background:var(--kart);border-radius:16px;padding:16px 18px}
+.kart .etk{font-size:12px;color:var(--gri);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.kart .buyuk{font-size:32px;font-weight:800;letter-spacing:-.02em;margin-top:4px}
+.kart .alt{font-size:14px;color:var(--gri);margin-top:2px}
+.arti{color:var(--yes)}.eksi{color:var(--kir)}
+.tablo{background:var(--kart);border-radius:16px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:12px;color:var(--gri);text-transform:uppercase;letter-spacing:.04em;font-weight:700;text-align:right;padding:10px 12px;background:#fafbfc}
+td{padding:11px 12px;border-top:1px solid var(--cizgi);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td.coin b{font-size:15px}
+td.coin span{display:block;font-size:12px;color:var(--gri)}
+.cubuk{height:6px;background:var(--cizgi);border-radius:3px;overflow:hidden;margin-top:4px;min-width:60px}
+.cubuk i{display:block;height:100%;background:var(--mavi)}
+.flash-up{animation:fu .8s}.flash-dn{animation:fd .8s}
+@keyframes fu{from{background:var(--yesA)}to{background:transparent}}
+@keyframes fd{from{background:var(--kirA)}to{background:transparent}}
+.ayar{margin-top:18px;background:var(--kart);border-radius:16px;padding:14px 18px}
+.ayar summary{cursor:pointer;font-weight:600}
+textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px solid #d5d9e0;border-radius:10px;font:13px/1.4 ui-monospace,Menlo,monospace}
+.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer;background:var(--yazi);color:#fff;margin-top:8px}
+.not{font-size:12px;color:var(--gri);margin-top:8px}
+.bos{padding:30px;text-align:center;color:var(--gri)}
+@media (max-width:700px){.gizle{display:none}.kart .buyuk{font-size:26px}td,th{padding:10px 8px}}
+</style>
+</head>
+<body>
+<div class="ust">
+  <h1>Investing</h1>
+  <div class="durum"><span class="nokta" id="nokta"></span><span id="durumYazi">Bağlanıyor…</span></div>
+</div>
+
+<div class="ozet">
+  <div class="kart"><div class="etk">Toplam değer</div><div class="buyuk r" id="topUsd">–</div><div class="alt r" id="topEur">–</div></div>
+  <div class="kart"><div class="etk">Son 24 saat</div><div class="buyuk r" id="degUsd">–</div><div class="alt r" id="degYuz">–</div></div>
+</div>
+
+<div class="tablo"><table>
+  <thead><tr><th>Coin</th><th class="gizle">Adet</th><th>Fiyat</th><th>24s</th><th>Değer</th><th class="gizle">Pay</th></tr></thead>
+  <tbody id="govde"></tbody>
+</table></div>
+
+<details class="ayar" id="ayar">
+  <summary>Portföyü düzenle</summary>
+  <div class="not">TradingView formülünü yapıştır (örnek: <code>16*BINANCE:ETHUSDT+200*BINANCE:LINKUSDT</code>). Adetler sitenin koduna yazılmaz; bu tarayıcıda ve linkinin # kısmında saklanır.</div>
+  <textarea id="formul" spellcheck="false"></textarea>
+  <button class="btn" onclick="formulKaydet()">Kaydet</button>
+  <div class="not">Bu linki kaydet, her cihazda aynı portföyü açar: <a id="link" href="#">link</a></div>
+</details>
+
+<script>
+const LS = "investingFormul";
+const fmtUsd = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"USD", currencyDisplay:"narrowSymbol", maximumFractionDigits:0 });
+const fmtEur = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"EUR", maximumFractionDigits:0 });
+function fiyatYaz(p){ const d = p >= 100 ? 2 : p >= 1 ? 3 : 4; return p.toLocaleString("fr-FR", { minimumFractionDigits:d, maximumFractionDigits:d }); }
+
+// "16*BINANCE:ETHUSDT+200*BINANCE:LINKUSDT" -> [{sym:"ETHUSDT", adet:16}, ...]  (ayni coin iki kez varsa ilki)
+function formulOku(s){
+  const out = [], gor = new Set();
+  const re = /(\d+(?:[.,]\d+)?)\s*\*\s*(?:[A-Z]+:)?([A-Z0-9]+?(?:USDT|USDC))(?![A-Z])/g;
+  let m;
+  while ((m = re.exec(String(s).toUpperCase()))) {
+    const sym = m[2], adet = parseFloat(m[1].replace(",", "."));
+    if (!gor.has(sym) && adet > 0) { gor.add(sym); out.push({ sym, adet }); }
+  }
+  return out;
+}
+
+let formul = decodeURIComponent(location.hash.slice(1)) || (()=>{ try { return localStorage.getItem(LS) || ""; } catch(e){ return ""; } })();
+let liste = formulOku(formul);
+const fiyat = {}, acilis = {}, onceki = {};
+let eurUsd = null, ws = null;
+
+function durum(t, y){ document.getElementById("nokta").className = "nokta " + t; document.getElementById("durumYazi").textContent = y; }
+function linkGuncelle(){
+  const url = location.origin + location.pathname + "#" + encodeURIComponent(formul);
+  const a = document.getElementById("link"); a.href = url; a.textContent = url.length > 70 ? url.slice(0, 70) + "…" : url;
+}
+function formulKaydet(){
+  formul = document.getElementById("formul").value.trim();
+  liste = formulOku(formul);
+  try { localStorage.setItem(LS, formul); } catch(e){}
+  history.replaceState(null, "", "#" + encodeURIComponent(formul));
+  linkGuncelle(); baslat();
+}
+
+function ciz(){
+  const g = document.getElementById("govde");
+  if (!liste.length) { g.innerHTML = `<tr><td colspan="6" class="bos">Portföy boş. Aşağıdan "Portföyü düzenle"yi açıp TradingView formülünü yapıştır.</td></tr>`; document.getElementById("ayar").open = true; return; }
+  let top = 0, top24 = 0, eksik = false;
+  const satir = liste.map(x => {
+    const p = fiyat[x.sym], o = acilis[x.sym];
+    if (p == null) { eksik = true; return { ...x, deger: 0 }; }
+    const deger = p * x.adet, deg24 = o ? (p - o) * x.adet : 0;
+    top += deger; top24 += deg24;
+    return { ...x, p, o, deger, deg24 };
+  }).sort((a, b) => b.deger - a.deger);
+
+  g.innerHTML = satir.map(x => {
+    const ad = x.sym.replace(/USDT$|USDC$/, "");
+    const yuz = x.o ? (x.p / x.o - 1) * 100 : null;
+    const pay = top ? x.deger / top * 100 : 0;
+    const yon = onceki[x.sym] == null || x.p == null ? "" : x.p > onceki[x.sym] ? "flash-up" : x.p < onceki[x.sym] ? "flash-dn" : "";
+    return `<tr class="${yon}">
+      <td class="coin"><b>${ad}</b><span>${x.adet.toLocaleString("fr-FR")} adet</span></td>
+      <td class="gizle r">${x.adet.toLocaleString("fr-FR")}</td>
+      <td class="r">${x.p == null ? "…" : fiyatYaz(x.p) + " $"}</td>
+      <td class="r ${yuz == null ? "" : yuz >= 0 ? "arti" : "eksi"}">${yuz == null ? "–" : (yuz >= 0 ? "+" : "") + yuz.toFixed(2) + "%"}</td>
+      <td class="r"><b>${x.p == null ? "…" : fmtUsd.format(x.deger)}</b>${eurUsd ? `<div style="font-size:12px;color:var(--gri)">${fmtEur.format(x.deger / eurUsd)}</div>` : ""}</td>
+      <td class="gizle r">${pay.toFixed(1)}%<div class="cubuk"><i style="width:${pay}%"></i></div></td>
+    </tr>`;
+  }).join("");
+  for (const x of satir) if (x.p != null) onceki[x.sym] = x.p;
+
+  document.getElementById("topUsd").textContent = fmtUsd.format(top) + (eksik ? " …" : "");
+  document.getElementById("topEur").textContent = eurUsd ? fmtEur.format(top / eurUsd) + "  ·  1 € = " + eurUsd.toFixed(4) + " $" : "–";
+  const yuz24 = top - top24 > 0 ? top24 / (top - top24) * 100 : 0;
+  const el = document.getElementById("degUsd");
+  el.textContent = (top24 >= 0 ? "+" : "") + fmtUsd.format(top24); el.className = "buyuk r " + (top24 >= 0 ? "arti" : "eksi");
+  document.getElementById("degYuz").textContent = (yuz24 >= 0 ? "+" : "") + yuz24.toFixed(2) + "% (Binance 24 saatlik)";
+}
+
+let cizZaman = null;
+function cizSonra(){ if (!cizZaman) cizZaman = setTimeout(() => { cizZaman = null; ciz(); }, 400); }
+
+async function anlik(){
+  const semboller = [...liste.map(x => x.sym), "EURUSDT"];
+  try {
+    const r = await fetch("https://api.binance.com/api/v3/ticker/24hr?symbols=" + encodeURIComponent(JSON.stringify(semboller)));
+    const d = await r.json();
+    if (!Array.isArray(d)) throw new Error(d.msg || "veri yok");
+    for (const t of d) {
+      if (t.symbol === "EURUSDT") eurUsd = +t.lastPrice;
+      else { fiyat[t.symbol] = +t.lastPrice; acilis[t.symbol] = +t.openPrice; }
+    }
+    ciz(); return true;
+  } catch (e) { durum("hata", "Fiyat alınamadı: " + e.message); return false; }
+}
+
+function canli(){
+  if (ws) { ws.onclose = null; ws.close(); }
+  const akis = [...liste.map(x => x.sym), "EURUSDT"].map(s => s.toLowerCase() + "@miniTicker").join("/");
+  ws = new WebSocket("wss://stream.binance.com:9443/stream?streams=" + akis);
+  ws.onopen = () => durum("ok", "Canlı · Binance");
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data).data;
+    if (d.s === "EURUSDT") eurUsd = +d.c;
+    else { fiyat[d.s] = +d.c; acilis[d.s] = +d.o; }
+    cizSonra();
+  };
+  ws.onclose = () => { durum("bekle", "Bağlantı koptu, yeniden bağlanıyor…"); setTimeout(canli, 3000); };
+  ws.onerror = () => ws.close();
+}
+
+async function baslat(){
+  document.getElementById("formul").value = formul;
+  linkGuncelle(); ciz();
+  if (!liste.length) { durum("", "Portföy boş"); return; }
+  await anlik(); canli();
+}
+setInterval(() => { if (!ws || ws.readyState !== 1) anlik(); }, 15000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) anlik(); });
+baslat();
+</script>
+</body>
+</html>
