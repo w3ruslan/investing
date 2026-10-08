@@ -49,6 +49,11 @@ td.coin span{display:block;font-size:12px;color:var(--gri)}
 #grafik{height:320px}
 tr.secili td{background:#eef3fd}
 #govde tr{cursor:pointer}
+.perde{position:fixed;inset:0;background:rgba(18,24,34,.5);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.perde.acik{display:flex}
+.pencere{background:#fff;border-radius:18px;padding:22px;width:100%;max-width:320px;text-align:center}
+.pencere input{width:100%;font-size:24px;text-align:center;letter-spacing:.3em;padding:10px;border:1px solid #d5d9e0;border-radius:10px;margin:12px 0 6px}
+.pencere .hata{color:var(--kir);font-size:13px;min-height:18px}
 .ayar{margin-top:18px;background:var(--kart);border-radius:16px;padding:14px 18px}
 .ayar summary{cursor:pointer;font-weight:600}
 textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px solid #d5d9e0;border-radius:10px;font:13px/1.4 ui-monospace,Menlo,monospace}
@@ -61,7 +66,7 @@ textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px soli
 <body>
 <div class="ust">
   <h1>Investing</h1>
-  <div class="durum"><span class="nokta" id="nokta"></span><span id="durumYazi">Bağlanıyor…</span></div>
+  <div class="durum"><span class="nokta" id="nokta"></span><span id="durumYazi">Bağlanıyor…</span><span id="bulut" style="margin-left:8px"></span></div>
 </div>
 
 <div class="ozet">
@@ -89,12 +94,25 @@ textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px soli
   <div class="not">TradingView formülünü yapıştır (örnek: <code>0.5*BINANCE:BTCUSDT+10*BINANCE:SOLUSDT</code>). Adetler sitenin koduna yazılmaz; bu tarayıcıda ve linkinin # kısmında saklanır.</div>
   <textarea id="formul" spellcheck="false"></textarea>
   <button class="btn" onclick="formulKaydet()">Kaydet</button>
-  <div class="not">Başka bir cihazda (telefon) bir kez bu linki aç; o cihaz da portföyü hatırlar: <a id="link" href="#">link</a></div>
+  <div class="not" style="margin-top:14px"><b>Bulut senkronu:</b> <span id="bulutDurum">–</span>
+    · <a href="#" onclick="pinSor();return false">PIN gir</a> · <a href="#" onclick="pinUnut();return false">PIN'i unut</a></div>
+  <div class="not">Yedek yol (PIN'siz): bu linki bir cihazda bir kez açarsan o cihaz portföyü hatırlar: <a id="link" href="#">link</a></div>
 </details>
 
+<div class="perde" id="pinPerde">
+  <div class="pencere">
+    <h3 style="margin:0">PIN kodu</h3>
+    <div class="not" style="margin-top:6px">Portföy buluttan yüklenir ve bütün cihazlarda senkron olur.</div>
+    <input id="pinGiris" type="password" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter')pinGonder()">
+    <div class="hata" id="pinHata"></div>
+    <button class="btn" style="width:100%" onclick="pinGonder()">Giriş</button>
+    <div class="not"><a href="#" onclick="document.getElementById('pinPerde').classList.remove('acik');return false">Şimdilik PIN'siz devam et</a></div>
+  </div>
+</div>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
-const LS = "investingFormul";
+const LS = "investingFormul", LS_T = "investingZaman", LS_PIN = "investingPin";
+const WORKER = "https://kasa-data.w3ruslan-8c5.workers.dev/?f=investing";
 const fmtUsd = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"USD", currencyDisplay:"narrowSymbol", maximumFractionDigits:0 });
 const fmtEur = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"EUR", maximumFractionDigits:0 });
 function fiyatYaz(p){ const d = p >= 100 ? 2 : p >= 1 ? 3 : 4; return p.toLocaleString("fr-FR", { minimumFractionDigits:d, maximumFractionDigits:d }); }
@@ -116,7 +134,7 @@ let formul = (()=>{ try { return localStorage.getItem(LS) || ""; } catch(e){ ret
 const hashFormul = decodeURIComponent(location.hash.slice(1));
 if (hashFormul && formulOku(hashFormul).length) {
   formul = hashFormul;
-  try { localStorage.setItem(LS, formul); } catch(e){}
+  try { localStorage.setItem(LS, formul); localStorage.setItem(LS_T, String(Date.now())); } catch(e){}
   history.replaceState(null, "", location.pathname);
 }
 let liste = formulOku(formul);
@@ -131,8 +149,8 @@ function linkGuncelle(){
 function formulKaydet(){
   formul = document.getElementById("formul").value.trim();
   liste = formulOku(formul);
-  try { localStorage.setItem(LS, formul); } catch(e){}
-  linkGuncelle(); baslat();
+  try { localStorage.setItem(LS, formul); localStorage.setItem(LS_T, String(Date.now())); } catch(e){}
+  linkGuncelle(); baslat(); senkron();
 }
 
 function ciz(){
@@ -320,6 +338,59 @@ function canliNokta(){
   el.className = fark >= 0 ? "arti" : "eksi";
 }
 
+// ============================================================================
+//  BULUT SENKRONU  (kasa worker'i, ?f=investing, PIN'li)
+//  Kural: hangi taraf daha yeni (t) ise o gecerli.
+// ============================================================================
+const pinAl = () => okuLS(LS_PIN, "");
+function bulutYaz(t, y){ document.getElementById("bulut").textContent = t; document.getElementById("bulutDurum").textContent = y || t; }
+function pinSor(hata){
+  document.getElementById("pinHata").textContent = hata || "";
+  document.getElementById("pinPerde").classList.add("acik");
+  setTimeout(() => document.getElementById("pinGiris").focus(), 50);
+}
+function pinGonder(){
+  const p = document.getElementById("pinGiris").value.trim(); if (!p) return;
+  yazLS(LS_PIN, p); document.getElementById("pinGiris").value = "";
+  document.getElementById("pinPerde").classList.remove("acik");
+  senkron();
+}
+function pinUnut(){ try { localStorage.removeItem(LS_PIN); } catch(e){} bulutYaz("", "kapalı (PIN yok)"); }
+
+let senkronda = false;
+async function senkron(){
+  const pin = pinAl();
+  if (!pin) { bulutYaz("", "kapalı (PIN yok)"); if (!liste.length) pinSor(); return; }
+  if (senkronda) return; senkronda = true;
+  bulutYaz("☁ …", "senkronize ediliyor…");
+  try {
+    const r = await fetch(WORKER + "&t=" + Date.now(), { cache: "no-store", headers: { "X-Pin": pin } });
+    if (r.status === 401) { try { localStorage.removeItem(LS_PIN); } catch(e){} bulutYaz("", "PIN yanlış"); pinSor("PIN yanlış"); return; }
+    if (!r.ok) throw new Error("okuma " + r.status);
+    const d = await r.json();
+    const uzakVar = d && typeof d.formul === "string" && d.formul.trim() !== "";
+    const uzakT = uzakVar ? (+d.t || 0) : 0;
+    const yerelT = +okuLS(LS_T, "0") || 0;
+    if (uzakVar && (uzakT > yerelT || !liste.length)) {
+      if (d.formul !== formul) {
+        formul = d.formul; liste = formulOku(formul);
+        yazLS(LS, formul); yazLS(LS_T, String(uzakT));
+        await baslat();
+      }
+    } else if (liste.length && (!uzakVar || yerelT > uzakT)) {
+      const t = yerelT || Date.now();
+      const w = await fetch(WORKER, { method: "POST", headers: { "Content-Type": "application/json", "X-Pin": pin }, body: JSON.stringify({ formul, t }) });
+      if (w.status === 401) { pinSor("PIN yanlış"); return; }
+      if (!w.ok) throw new Error("yazma " + w.status);
+      yazLS(LS_T, String(t));
+    }
+    bulutYaz("☁ ✓", "açık · senkronize " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
+  } catch (e) {
+    bulutYaz("☁ ✕", "bağlantı yok (" + e.message + ") · bu cihazdaki portföy gösteriliyor");
+  } finally { senkronda = false; }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && pinAl()) senkron(); });
+
 async function baslat(){
   document.getElementById("formul").value = formul;
   linkGuncelle(); ciz();
@@ -330,7 +401,7 @@ async function baslat(){
 }
 setInterval(() => { if (!ws || ws.readyState !== 1) anlik(); }, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) anlik(); });
-baslat();
+baslat().then(senkron);
 </script>
 </body>
 </html>
