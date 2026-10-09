@@ -31,6 +31,9 @@ table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th{font-size:12px;color:var(--gri);text-transform:uppercase;letter-spacing:.04em;font-weight:700;text-align:right;padding:10px 12px;background:#fafbfc}
 td{padding:11px 12px;border-top:1px solid var(--cizgi);text-align:right;white-space:nowrap}
 th:first-child,td:first-child{text-align:left}
+td.coin .ci{display:flex;align-items:center;gap:10px}
+.ikon{width:30px;height:30px;border-radius:50%;flex:none;object-fit:cover;background:#eef0f4}
+.harf{width:30px;height:30px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#e3e9f6;color:#2f6be0;font-weight:800;font-size:12px}
 td.coin b{font-size:15px}
 td.coin span{display:block;font-size:12px;color:var(--gri)}
 .cubuk{height:6px;background:var(--cizgi);border-radius:3px;overflow:hidden;margin-top:4px;min-width:60px}
@@ -171,7 +174,7 @@ function ciz(){
     const pay = top ? x.deger / top * 100 : 0;
     const yon = onceki[x.sym] == null || x.p == null ? "" : x.p > onceki[x.sym] ? "flash-up" : x.p < onceki[x.sym] ? "flash-dn" : "";
     return `<tr class="${yon} ${secili===x.sym?"secili":""}" onclick="secimYap('${x.sym}')">
-      <td class="coin"><b>${ad}</b><span>${x.adet.toLocaleString("fr-FR")} adet</span></td>
+      <td class="coin"><div class="ci">${ikonHtml(ad)}<div><b>${ad}</b><span>${x.adet.toLocaleString("fr-FR")} adet</span></div></div></td>
       <td class="gizle r">${x.adet.toLocaleString("fr-FR")}</td>
       <td class="r">${x.p == null ? "…" : fiyatYaz(x.p) + " $"}</td>
       <td class="r ${yuz == null ? "" : yuz >= 0 ? "arti" : "eksi"}">${yuz == null ? "–" : (yuz >= 0 ? "+" : "") + yuz.toFixed(2) + "%"}</td>
@@ -391,11 +394,40 @@ async function senkron(){
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && pinAl()) senkron(); });
 
+// ============================================================================
+//  COIN IKONLARI  (Binance'in ikon listesi; cihazda 7 gun saklanir)
+//  Yedek: CoinCap ikonu, o da yoksa bas harf.
+// ============================================================================
+const LS_IKON = "investingIkon";
+let ikonlar = (()=>{ try { const d = JSON.parse(localStorage.getItem(LS_IKON) || "null"); return d && d.m ? d : { t: 0, m: {} }; } catch(e){ return { t: 0, m: {} }; } })();
+const coincap = ad => `https://assets.coincap.io/assets/icons/${ad.toLowerCase()}@2x.png`;
+function ikonHtml(ad){
+  const src = ikonlar.m[ad] || coincap(ad);
+  return `<img class="ikon" src="${src}" alt="" referrerpolicy="no-referrer" onerror="ikonHata(this,'${ad}')">`;
+}
+function ikonHata(img, ad){
+  if (!img.dataset.yedek && img.src !== coincap(ad)) { img.dataset.yedek = "1"; img.src = coincap(ad); return; }
+  const s = document.createElement("span"); s.className = "harf"; s.textContent = ad.slice(0, 3);
+  img.replaceWith(s);
+}
+async function ikonYukle(){
+  const eksik = liste.some(x => !ikonlar.m[x.sym.replace(/USDT$|USDC$/, "")]);
+  if (!eksik && Date.now() - ikonlar.t < 7 * 864e5) return;
+  try {
+    const d = await (await fetch("https://www.binance.com/bapi/asset/v2/public/asset/asset/get-all-asset")).json();
+    const m = {};
+    const lazim = new Set(liste.map(x => x.sym.replace(/USDT$|USDC$/, "")));
+    for (const x of d.data || []) if (lazim.has(x.assetCode) && x.logoUrl) m[x.assetCode] = x.logoUrl;
+    if (Object.keys(m).length) { ikonlar = { t: Date.now(), m }; try { localStorage.setItem(LS_IKON, JSON.stringify(ikonlar)); } catch(e){} ciz(); }
+  } catch (e) { /* yedek ikonlar kullanilir */ }
+}
+
 async function baslat(){
   document.getElementById("formul").value = formul;
   linkGuncelle(); ciz();
   if (!liste.length) { durum("", "Portföy boş"); return; }
   periyotCiz();
+  ikonYukle();
   await anlik(); canli();
   grafikYukle();
 }
