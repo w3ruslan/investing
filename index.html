@@ -84,7 +84,7 @@ textarea{width:100%;min-height:90px;margin-top:10px;padding:10px;border:1px soli
     <div class="periyot" id="periyot"></div>
   </div>
   <div id="grafik"></div>
-  <div class="not" style="margin-top:4px">Geçmiş, bugünkü adetlerin o tarihte de elde olduğu varsayımıyla çizilir. Bir coine dokun: o coinin grafiği.</div>
+  <div class="not" style="margin-top:4px">Geçmiş, bugünkü adetlerin o tarihte de elde olduğu varsayımıyla çizilir. Bir coine dokun: o coinin grafiği. <b>Fare tekerleği</b> = mum sayısını artır/azalt · <b>sürükle</b> = geçmişe kaydır · telefonda iki parmakla yakınlaştır · zaman eksenine çift tık = sıfırla.</div>
 </div>
 
 <div class="tablo"><table>
@@ -268,10 +268,12 @@ function grafikKur(){
     layout: { background: { color: "#ffffff" }, textColor: "#555", fontSize: 12 },
     grid: { vertLines: { color: "#f2f2f2" }, horzLines: { color: "#f2f2f2" } },
     rightPriceScale: { borderVisible: false },
-    timeScale: { borderVisible: false, timeVisible: true, rightOffset: 2, fixLeftEdge: true, fixRightEdge: true },
+    timeScale: { borderVisible: false, timeVisible: true, rightOffset: 3, fixLeftEdge: true, minBarSpacing: 0.5, rightBarStaysOnScroll: true },
     crosshair: { mode: 0, vertLine: { color: "#2f6be0", width: 1, style: 0 }, horzLine: { color: "#2f6be0", width: 1, style: 0 } },
     localization: { priceFormatter: v => v >= 1000 ? Math.round(v).toLocaleString("fr-FR") + " $" : v.toLocaleString("fr-FR", { maximumFractionDigits: 4 }) + " $" },
-    handleScroll: false, handleScale: false,
+    // TradingView gibi: tekerlek = yakinlastir/uzaklastir, surukle = kaydir, telefonda iki parmak
+    handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+    handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: { time: true, price: true } },
   });
   const ortak = { priceLineVisible: true, priceLineStyle: 2, priceLineWidth: 1, priceLineColor: "#222", lastValueVisible: true };
   mumSeri = chart.addCandlestickSeries({
@@ -282,7 +284,9 @@ function grafikKur(){
   });
   cizgiSeri = chart.addAreaSeries({ ...ortak, lineColor: "#2f6be0", topColor: "rgba(47,107,224,.25)", bottomColor: "rgba(47,107,224,0)", lineWidth: 2 });
   tipUygula();
-  new ResizeObserver(() => { chart.applyOptions({ width: el.clientWidth, height: el.clientHeight }); chart.timeScale().fitContent(); }).observe(el);
+  new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })).observe(el);
+  // sola (gecmise) dayaninca daha eski mumlari yukle
+  chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if (r && r.from < 5) eskiYukle(); });
 }
 
 async function grafikYukle(){
@@ -291,14 +295,42 @@ async function grafikYukle(){
   document.getElementById("gDegisim").textContent = "yükleniyor…";
   try {
     const sonuc = await Promise.all(liste.map(x =>
-      fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=${p.iv}&limit=${Math.min(p.n, 1000)}`).then(r => r.json())));
-    mumlar = {};
+      fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=${p.iv}&limit=1000`).then(r => r.json())));
+    mumlar = {}; eskiBitti = false;
     liste.forEach((x, i) => { const m = new Map(); if (Array.isArray(sonuc[i])) for (const k of sonuc[i]) m.set(k[0] / 1000, [+k[1], +k[2], +k[3], +k[4]]); mumlar[x.sym] = m; });
     grafikVeri();
   } catch (e) { document.getElementById("gDegisim").textContent = "Grafik alınamadı"; }
 }
 
-function grafikVeri(){
+// ilk acilista periyodun mum sayisi gorunur; tekerlekle daha fazlasi/azi
+function gorunumSifirla(){
+  const p = PERIYOT.find(x => x.ad === periyot), n = mumSeri.data().length;
+  if (n > p.n) chart.timeScale().setVisibleLogicalRange({ from: n - p.n, to: n - 1 + 3 });
+  else chart.timeScale().fitContent();
+}
+let eskiYukleniyor = false, eskiBitti = false;
+async function eskiYukle(){
+  if (eskiYukleniyor || eskiBitti || !mumSeri || !liste.length) return;
+  eskiYukleniyor = true;
+  const p = PERIYOT.find(x => x.ad === periyot), iv = p.iv;
+  try {
+    const sonuc = await Promise.all(liste.map(x => {
+      const m = mumlar[x.sym]; if (!m || !m.size) return null;
+      const ilk = Math.min(...m.keys());
+      return fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=${iv}&limit=1000&endTime=${ilk * 1000 - 1}`).then(r => r.json());
+    }));
+    if (PERIYOT.find(x => x.ad === periyot).iv !== iv) return;   // bu arada periyot degisti
+    liste.forEach((x, i) => { if (Array.isArray(sonuc[i])) for (const k of sonuc[i]) mumlar[x.sym].set(k[0] / 1000, [+k[1], +k[2], +k[3], +k[4]]); });
+    const ts = chart.timeScale(), r = ts.getVisibleLogicalRange(), once = mumSeri.data().length;
+    grafikVeri(true);
+    const fark = mumSeri.data().length - once;
+    if (fark <= 0) eskiBitti = true;                                  // daha eski veri yok
+    else if (r) ts.setVisibleLogicalRange({ from: r.from + fark, to: r.to + fark });
+  } catch (e) { /* sonra tekrar denenir */ }
+  finally { eskiYukleniyor = false; }
+}
+
+function grafikVeri(gorunumKoru){
   if (!mumSeri) return;
   const semboller = secili ? [secili] : liste.map(x => x.sym);
   const adet = Object.fromEntries(liste.map(x => [x.sym, x.adet]));
@@ -312,9 +344,10 @@ function grafikVeri(){
   });
   mumSeri.setData(veri);
   cizgiSeri.setData(veri.map(v => ({ time: v.time, value: v.close })));
-  chart.timeScale().fitContent();
+  if (!gorunumKoru) { gorunumSifirla(); eskiBitti = false; }
   son = veri.length ? { ...veri[veri.length - 1] } : null;
-  ilkDeger = veri.length ? veri[0].open : null;
+  const pn = PERIYOT.find(x => x.ad === periyot).n;               // degisim: periyodun basindan
+  ilkDeger = veri.length ? veri[Math.max(0, veri.length - pn)].open : null;
   document.getElementById("gBaslik").firstChild.textContent = secili ? secili.replace(/USDT$|USDC$/, "") + " değeri" : "Portföy değeri";
   canliNokta();
 }
