@@ -190,6 +190,10 @@ function ciz(){
   const el = document.getElementById("degUsd");
   el.textContent = (top24 >= 0 ? "+" : "") + fmtUsd.format(top24); el.className = "buyuk r " + (top24 >= 0 ? "arti" : "eksi");
   document.getElementById("degYuz").textContent = (yuz24 >= 0 ? "+" : "") + yuz24.toFixed(2) + "% (Binance 24 saatlik)";
+  // sekme basligi (TradingView gibi): deger ▲/▼ gunluk degisim ve yuzde
+  document.title = top && !eksik
+    ? `${fmtUsd.format(top)} ${top24 >= 0 ? "▲ +" : "▼ "}${fmtUsd.format(top24)} (${top24 >= 0 ? "+" : ""}${yuz24.toFixed(2).replace(".", ",")}%)`
+    : "Investing";
   canliNokta();
 }
 
