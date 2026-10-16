@@ -398,7 +398,7 @@ function grafikRenk(){
   }[tema];
   chart.applyOptions({
     layout: { background: { type: "solid", color: R.bg }, textColor: R.yazi },
-    grid: { vertLines: { color: R.izgara }, horzLines: { color: R.izgara } },
+    grid: { vertLines: { visible: false }, horzLines: { visible: false } },   // arka plan kareleri yok
     crosshair: { vertLine: { color: R.cz, labelBackgroundColor: R.etiket }, horzLine: { color: R.cz, labelBackgroundColor: R.etiket } },
   });
   mumSeri.applyOptions({ ...R.mum, priceLineColor: R.cz });
