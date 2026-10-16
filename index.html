@@ -170,7 +170,7 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
       <div class="not"><b>E-kâğıt tonu</b> (yalnız ◐ E-kâğıt temasında) — e-okuyucunun yanına koyup kaydırarak eşitle:</div>
       <label class="kaydir">Aydınlık<input type="range" id="kL" min="38" max="94" step="1" oninput="kagitDegis()"><span id="kLd"></span></label>
       <label class="kaydir">Sıcaklık<input type="range" id="kS" min="0" max="45" step="1" oninput="kagitDegis()"><span id="kSd"></span></label>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn ince" onclick="kagitHazir('kobo')">Kobo (fotoğraftan)</button><button class="btn ince" onclick="kagitHazir('acik')">Açık kâğıt</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn ince" onclick="kagitHazir('kobo')">Kobo</button><button class="btn ince" onclick="kagitHazir('koyu')">Koyu kâğıt</button><button class="btn ince" onclick="kagitHazir('acik')">Açık kâğıt</button></div>
       <div class="not"><b>Grafik:</b> üstteki düğmeler bir mumun süresi (5dk, 1 saat, 4 saat, 1 gün, 1 hafta, 1 ay); sol üstteki değişim ekranda görünen ilk mumdan bu yana · fare tekerleği = mum sayısını artır/azalt · sürükle = geçmişe kaydır · telefonda iki parmakla yakınlaştır · zaman eksenine çift tık = sıfırla. Listeden bir coine tıkla: o coinin grafiği. Geçmiş, bugünkü adetlerin o tarihte de elde olduğu varsayımıyla çizilir.</div>
     </details>
   </aside>
@@ -193,8 +193,8 @@ const TEMALAR = { kagit:{ ad:"E-kağıt", bg:"#ebe9e3" }, koyu:{ ad:"Koyu", bg:"
 let tema = (()=>{ try { return localStorage.getItem("investingTemaV2") || "kagit"; } catch(e){ return "kagit"; } })();
 if (!TEMALAR[tema]) tema = "kagit";
 // e-kagit tonu (HSL): varsayilan, e-okuyucu fotografindan olculen renk
-const KAGIT_HAZIR = { kobo:{ h:35, s:27, l:48 }, acik:{ h:45, s:17, l:90 } };
-let kagit = (()=>{ try { const k = JSON.parse(localStorage.getItem("investingKagit") || "null"); if (k && k.l) return k; } catch(e){} return { ...KAGIT_HAZIR.kobo }; })();
+const KAGIT_HAZIR = { kobo:{ h:38, s:23, l:79 }, koyu:{ h:35, s:27, l:48 }, acik:{ h:45, s:17, l:90 } };
+let kagit = (()=>{ try { const k = JSON.parse(localStorage.getItem("investingKagit2") || "null"); if (k && k.l) return k; } catch(e){} return { ...KAGIT_HAZIR.kobo }; })();
 function hslHex(h, s, l){
   s /= 100; l = Math.max(0, Math.min(100, l)) / 100;
   const f = n => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, "0"); };
@@ -216,11 +216,11 @@ function kagitUygula(){
 }
 function kagitDegis(){
   kagit = { ...kagit, l: +document.getElementById("kL").value, s: +document.getElementById("kS").value };
-  try { localStorage.setItem("investingKagit", JSON.stringify(kagit)); } catch(e){}
+  try { localStorage.setItem("investingKagit2", JSON.stringify(kagit)); } catch(e){}
   if (tema !== "kagit") { tema = "kagit"; try { localStorage.setItem("investingTemaV2", tema); } catch(e){} }
   temaUygula();
 }
-function kagitHazir(ad){ kagit = { ...KAGIT_HAZIR[ad] }; try { localStorage.setItem("investingKagit", JSON.stringify(kagit)); } catch(e){} if (tema !== "kagit") tema = "kagit"; temaUygula(); }
+function kagitHazir(ad){ kagit = { ...KAGIT_HAZIR[ad] }; try { localStorage.setItem("investingKagit2", JSON.stringify(kagit)); } catch(e){} if (tema !== "kagit") tema = "kagit"; temaUygula(); }
 function temaUygula(){
   document.documentElement.dataset.tema = tema;
   kagitUygula();
