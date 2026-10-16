@@ -106,6 +106,10 @@ a{color:var(--mavi)}
 .ayar summary:hover{color:var(--yazi)}
 textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid var(--cizgi);border-radius:6px;background:var(--panel);font:12px/1.4 ui-monospace,Menlo,monospace;color:var(--yazi)}
 .btn{border:0;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;background:var(--mavi);color:#fff;margin-top:6px}
+.kaydir{display:grid;grid-template-columns:70px 1fr 34px;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--yazi)}
+.kaydir input{width:100%;accent-color:var(--yazi)}
+.kaydir span{text-align:right;color:var(--gri);font-variant-numeric:tabular-nums}
+.btn.ince{background:transparent;color:var(--yazi);border:1px solid var(--cizgi);font-weight:600;padding:6px 10px}
 .not{font-size:11.5px;color:var(--gri);margin-top:8px;line-height:1.45}
 .bos{padding:24px 14px;text-align:center;color:var(--gri)}
 
@@ -163,6 +167,10 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
       <button class="btn" onclick="formulKaydet()">Kaydet</button>
       <div class="not"><b>Bulut senkronu:</b> <span id="bulutDurum">–</span> · <a href="#" onclick="pinSor();return false">PIN gir</a> · <a href="#" onclick="pinUnut();return false">PIN'i unut</a></div>
       <div class="not">Yedek yol (PIN'siz): bu linki bir cihazda bir kez açarsan o cihaz portföyü hatırlar: <a id="link" href="#">link</a></div>
+      <div class="not"><b>E-kâğıt tonu</b> (yalnız ◐ E-kâğıt temasında) — e-okuyucunun yanına koyup kaydırarak eşitle:</div>
+      <label class="kaydir">Aydınlık<input type="range" id="kL" min="38" max="94" step="1" oninput="kagitDegis()"><span id="kLd"></span></label>
+      <label class="kaydir">Sıcaklık<input type="range" id="kS" min="0" max="45" step="1" oninput="kagitDegis()"><span id="kSd"></span></label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn ince" onclick="kagitHazir('kobo')">Kobo (fotoğraftan)</button><button class="btn ince" onclick="kagitHazir('acik')">Açık kâğıt</button></div>
       <div class="not"><b>Grafik:</b> üstteki düğmeler bir mumun süresi (5dk, 1 saat, 4 saat, 1 gün, 1 hafta, 1 ay); sol üstteki değişim ekranda görünen ilk mumdan bu yana · fare tekerleği = mum sayısını artır/azalt · sürükle = geçmişe kaydır · telefonda iki parmakla yakınlaştır · zaman eksenine çift tık = sıfırla. Listeden bir coine tıkla: o coinin grafiği. Geçmiş, bugünkü adetlerin o tarihte de elde olduğu varsayımıyla çizilir.</div>
     </details>
   </aside>
@@ -184,9 +192,39 @@ const LS = "investingFormul", LS_T = "investingZaman", LS_PIN = "investingPin";
 const TEMALAR = { kagit:{ ad:"E-kağıt", bg:"#ebe9e3" }, koyu:{ ad:"Koyu", bg:"#131722" }, acik:{ ad:"Açık", bg:"#ffffff" } };
 let tema = (()=>{ try { return localStorage.getItem("investingTemaV2") || "kagit"; } catch(e){ return "kagit"; } })();
 if (!TEMALAR[tema]) tema = "kagit";
+// e-kagit tonu (HSL): varsayilan, e-okuyucu fotografindan olculen renk
+const KAGIT_HAZIR = { kobo:{ h:35, s:27, l:48 }, acik:{ h:45, s:17, l:90 } };
+let kagit = (()=>{ try { const k = JSON.parse(localStorage.getItem("investingKagit") || "null"); if (k && k.l) return k; } catch(e){} return { ...KAGIT_HAZIR.kobo }; })();
+function hslHex(h, s, l){
+  s /= 100; l = Math.max(0, Math.min(100, l)) / 100;
+  const f = n => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, "0"); };
+  return "#" + f(0) + f(8) + f(4);
+}
+function kagitRenkleri(){
+  const { h, s, l } = kagit;
+  return { bg:hslHex(h,s,l), panel:hslHex(h,s,l-4), cizgi:hslHex(h,s*.9,l-14), hover:hslHex(h,s,l-6), sec:hslHex(h,s,l-11),
+           gri:hslHex(h,s*.5,Math.max(l-42,14)), acik:hslHex(h,s*.6,l-24) };
+}
+function kagitUygula(){
+  const st = document.documentElement.style, ad = ["--bg","--panel","--panel2","--cizgi","--hover","--sec","--gri","--acik"];
+  if (tema !== "kagit") { ad.forEach(v => st.removeProperty(v)); return; }
+  const k = kagitRenkleri();
+  st.setProperty("--bg", k.bg); st.setProperty("--panel", k.panel); st.setProperty("--panel2", k.bg); st.setProperty("--cizgi", k.cizgi);
+  st.setProperty("--hover", k.hover); st.setProperty("--sec", k.sec); st.setProperty("--gri", k.gri); st.setProperty("--acik", k.acik);
+  const L = document.getElementById("kL"), S = document.getElementById("kS");
+  if (L) { L.value = kagit.l; S.value = kagit.s; document.getElementById("kLd").textContent = kagit.l; document.getElementById("kSd").textContent = kagit.s; }
+}
+function kagitDegis(){
+  kagit = { ...kagit, l: +document.getElementById("kL").value, s: +document.getElementById("kS").value };
+  try { localStorage.setItem("investingKagit", JSON.stringify(kagit)); } catch(e){}
+  if (tema !== "kagit") { tema = "kagit"; try { localStorage.setItem("investingTemaV2", tema); } catch(e){} }
+  temaUygula();
+}
+function kagitHazir(ad){ kagit = { ...KAGIT_HAZIR[ad] }; try { localStorage.setItem("investingKagit", JSON.stringify(kagit)); } catch(e){} if (tema !== "kagit") tema = "kagit"; temaUygula(); }
 function temaUygula(){
   document.documentElement.dataset.tema = tema;
-  document.querySelector('meta[name="theme-color"]').content = TEMALAR[tema].bg;
+  kagitUygula();
+  document.querySelector('meta[name="theme-color"]').content = tema === "kagit" ? kagitRenkleri().bg : TEMALAR[tema].bg;
   const b = document.getElementById("temaBtn"), sira = Object.keys(TEMALAR), sonraki = sira[(sira.indexOf(tema) + 1) % sira.length];
   b.textContent = "◐"; b.title = `Tema: ${TEMALAR[tema].ad} → ${TEMALAR[sonraki].ad}`;
   grafikRenk();
@@ -393,8 +431,8 @@ function secimYap(sym){ secili = sym; document.getElementById("geri").style.disp
 function grafikRenk(){
   if (!chart) return;
   const R = {
-    kagit: { bg:"rgba(0,0,0,0)", yazi:"#3b3a36", izgara:"#d9d6cd", cz:"#5d5b55", etiket:"#1c1c1a",
-             mum:{ upColor:"#ebe9e3", downColor:"#1c1c1a", borderUpColor:"#1c1c1a", borderDownColor:"#1c1c1a", wickUpColor:"#1c1c1a", wickDownColor:"#1c1c1a" },   // e-kagit: yukselen ici bos, dusen dolu murekkep
+    kagit: { bg:"rgba(0,0,0,0)", yazi:"#262521", izgara:"#d9d6cd", cz:"#3d3b36", etiket:"#1c1c1a",
+             mum:{ upColor:kagitRenkleri().bg, downColor:"#1c1c1a", borderUpColor:"#1c1c1a", borderDownColor:"#1c1c1a", wickUpColor:"#1c1c1a", wickDownColor:"#1c1c1a" },   // e-kagit: yukselen ici bos, dusen dolu murekkep
              cizgi:{ lineColor:"#1c1c1a", topColor:"rgba(28,28,26,.13)", bottomColor:"rgba(28,28,26,0)" } },
     koyu:  { bg:"#131722", yazi:"#9598a1", izgara:"#1c202b", cz:"#758696", etiket:"#363a45",
              mum:{ upColor:"#26a69a", downColor:"#ef5350", borderUpColor:"#26a69a", borderDownColor:"#ef5350", wickUpColor:"#26a69a", wickDownColor:"#ef5350" },
