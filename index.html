@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#131722">
+<meta name="theme-color" content="#ebe9e3">
 <meta name="robots" content="noindex">
 <title>Investing</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -20,6 +20,17 @@
   --yazi:#131722; --gri:#787b86; --acik:#b2b5be; --mavi:#2962ff; --yes:#089981; --kir:#f23645;
   --yesA:rgba(8,153,129,.12); --kirA:rgba(242,54,69,.12); --golge:rgba(19,23,34,.18);
 }
+/* e-kagit (e-ink): kagit zemin, murekkep yazi, renkler cok soluk */
+[data-tema="kagit"]{
+  --bg:#ebe9e3; --panel:#e2e0d9; --panel2:#ebe9e3; --cizgi:#c9c6bd; --hover:#dedcd4; --sec:#d3d0c7;
+  --yazi:#1c1c1a; --gri:#5d5b55; --acik:#9b988e; --mavi:#1c1c1a; --yes:#35614a; --kir:#8c3a31;
+  --yesA:rgba(53,97,74,.14); --kirA:rgba(140,58,49,.14); --golge:rgba(28,28,26,.15);
+}
+[data-tema="kagit"] body{background-color:var(--bg);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+[data-tema="kagit"] .ust,[data-tema="kagit"] .yan{background:transparent}
+[data-tema="kagit"] .ikon{filter:grayscale(1) contrast(1.15)}
+[data-tema="kagit"] .flash-up .son,[data-tema="kagit"] .flash-dn .son{animation:none}
+[data-tema="kagit"] .satir.secili{border-left-width:3px}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--yazi);font:13px/1.35 -apple-system,BlinkMacSystemFont,"Trebuchet MS","Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 button,input,textarea{font:inherit;color:inherit}
@@ -131,7 +142,7 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
     <div class="bosluk"></div>
     <div class="grup" id="tipGrup"></div>
     <div class="grup" id="periyot"></div>
-    <button class="ikonBtn" id="temaBtn" onclick="temaDegis()" title="Açık / koyu tema">☀</button>
+    <button class="ikonBtn" id="temaBtn" onclick="temaDegis()" title="Tema">◐</button>
     <div class="durum"><span class="nokta" id="nokta"></span><span id="durumYazi">Bağlanıyor…</span><span id="bulut"></span></div>
   </header>
 
@@ -170,14 +181,20 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 const LS = "investingFormul", LS_T = "investingZaman", LS_PIN = "investingPin";
-let tema = (()=>{ try { return localStorage.getItem("investingTema") || "koyu"; } catch(e){ return "koyu"; } })();
+const TEMALAR = { kagit:{ ad:"E-kağıt", bg:"#ebe9e3" }, koyu:{ ad:"Koyu", bg:"#131722" }, acik:{ ad:"Açık", bg:"#ffffff" } };
+let tema = (()=>{ try { return localStorage.getItem("investingTemaV2") || "kagit"; } catch(e){ return "kagit"; } })();
+if (!TEMALAR[tema]) tema = "kagit";
 function temaUygula(){
   document.documentElement.dataset.tema = tema;
-  document.querySelector('meta[name="theme-color"]').content = tema === "koyu" ? "#131722" : "#ffffff";
-  document.getElementById("temaBtn").textContent = tema === "koyu" ? "☀" : "☾";
+  document.querySelector('meta[name="theme-color"]').content = TEMALAR[tema].bg;
+  const b = document.getElementById("temaBtn"), sira = Object.keys(TEMALAR), sonraki = sira[(sira.indexOf(tema) + 1) % sira.length];
+  b.textContent = "◐"; b.title = `Tema: ${TEMALAR[tema].ad} → ${TEMALAR[sonraki].ad}`;
   grafikRenk();
 }
-function temaDegis(){ tema = tema === "koyu" ? "acik" : "koyu"; try { localStorage.setItem("investingTema", tema); } catch(e){} temaUygula(); }
+function temaDegis(){
+  const sira = Object.keys(TEMALAR); tema = sira[(sira.indexOf(tema) + 1) % sira.length];
+  try { localStorage.setItem("investingTemaV2", tema); } catch(e){} temaUygula();
+}
 const WORKER = "https://kasa-data.w3ruslan-8c5.workers.dev/?f=investing";
 const fmtUsd = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"USD", currencyDisplay:"narrowSymbol", maximumFractionDigits:0 });
 const fmtEur = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"EUR", maximumFractionDigits:0 });
@@ -368,15 +385,24 @@ function tipUygula(){
 function secimYap(sym){ secili = sym; document.getElementById("geri").style.display = sym ? "inline-block" : "none"; ciz(); grafikVeri(); }
 function grafikRenk(){
   if (!chart) return;
-  const k = tema === "koyu";
-  const up = k ? "#26a69a" : "#089981", dn = k ? "#ef5350" : "#f23645", cz = k ? "#758696" : "#9598a1";
+  const R = {
+    kagit: { bg:"rgba(0,0,0,0)", yazi:"#3b3a36", izgara:"#d9d6cd", cz:"#5d5b55", etiket:"#1c1c1a",
+             mum:{ upColor:"#ebe9e3", downColor:"#1c1c1a", borderUpColor:"#1c1c1a", borderDownColor:"#1c1c1a", wickUpColor:"#1c1c1a", wickDownColor:"#1c1c1a" },
+             cizgi:{ lineColor:"#1c1c1a", topColor:"rgba(28,28,26,.13)", bottomColor:"rgba(28,28,26,0)" } },
+    koyu:  { bg:"#131722", yazi:"#9598a1", izgara:"#1c202b", cz:"#758696", etiket:"#363a45",
+             mum:{ upColor:"#26a69a", downColor:"#ef5350", borderUpColor:"#26a69a", borderDownColor:"#ef5350", wickUpColor:"#26a69a", wickDownColor:"#ef5350" },
+             cizgi:{ lineColor:"#2962ff", topColor:"rgba(41,98,255,.28)", bottomColor:"rgba(41,98,255,0)" } },
+    acik:  { bg:"#ffffff", yazi:"#5d606b", izgara:"#f0f3fa", cz:"#9598a1", etiket:"#131722",
+             mum:{ upColor:"#089981", downColor:"#f23645", borderUpColor:"#089981", borderDownColor:"#f23645", wickUpColor:"#089981", wickDownColor:"#f23645" },
+             cizgi:{ lineColor:"#2962ff", topColor:"rgba(41,98,255,.22)", bottomColor:"rgba(41,98,255,0)" } },
+  }[tema];
   chart.applyOptions({
-    layout: { background: { color: k ? "#131722" : "#ffffff" }, textColor: k ? "#9598a1" : "#5d606b" },
-    grid: { vertLines: { color: k ? "#1c202b" : "#f0f3fa" }, horzLines: { color: k ? "#1c202b" : "#f0f3fa" } },
-    crosshair: { vertLine: { color: cz, labelBackgroundColor: k ? "#363a45" : "#131722" }, horzLine: { color: cz, labelBackgroundColor: k ? "#363a45" : "#131722" } },
+    layout: { background: { type: "solid", color: R.bg }, textColor: R.yazi },
+    grid: { vertLines: { color: R.izgara }, horzLines: { color: R.izgara } },
+    crosshair: { vertLine: { color: R.cz, labelBackgroundColor: R.etiket }, horzLine: { color: R.cz, labelBackgroundColor: R.etiket } },
   });
-  mumSeri.applyOptions({ upColor: up, downColor: dn, borderUpColor: up, borderDownColor: dn, wickUpColor: up, wickDownColor: dn, priceLineColor: cz });
-  cizgiSeri.applyOptions({ priceLineColor: cz });
+  mumSeri.applyOptions({ ...R.mum, priceLineColor: R.cz });
+  cizgiSeri.applyOptions({ ...R.cizgi, priceLineColor: R.cz });
 }
 
 function grafikKur(){
@@ -394,7 +420,7 @@ function grafikKur(){
   });
   const ortak = { priceLineVisible: true, priceLineStyle: 2, priceLineWidth: 1, lastValueVisible: true };
   mumSeri = chart.addCandlestickSeries({ ...ortak });
-  cizgiSeri = chart.addAreaSeries({ ...ortak, lineColor: "#2962ff", topColor: "rgba(41,98,255,.28)", bottomColor: "rgba(41,98,255,0)", lineWidth: 2 });
+  cizgiSeri = chart.addAreaSeries({ ...ortak, lineWidth: 2 });
   grafikRenk();
   tipUygula();
   new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })).observe(el);
