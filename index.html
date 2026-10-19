@@ -120,6 +120,9 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
 .dSatir input.adet{text-align:right;font-variant-numeric:tabular-nums}
 .dSatir input.hatali{border-color:var(--kir);background:var(--kirA)}
 .dSatir input:focus{outline:none;border-color:var(--mavi)}
+.dSatir.nakit{margin-top:10px}
+.dSatir.nakit label{font-weight:600;font-size:13px;color:var(--yazi)}
+.satir.nakitSat{cursor:default}
 .duzMesaj{min-height:16px}
 .duzMesaj.hata{color:var(--kir)}
 .formulKutu{margin-top:10px}
@@ -177,6 +180,7 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
     <details class="ayar" id="ayar">
       <summary>⚙ Portföyü düzenle · yardım</summary>
       <div class="not">Coin adını ve adedini yaz (örnek: <b>BTC</b> · <b>0,5</b>). Adetler sitenin koduna yazılmaz; bu tarayıcıda ve bulutta (PIN'li) saklanır.</div>
+      <div class="dSatir nakit"><label for="nakitGiris">💵 Nakit (USDT)</label><input id="nakitGiris" class="adet" inputmode="decimal" placeholder="0" autocomplete="off"><span></span></div>
       <div class="duzBas"><span>Coin</span><span>Adet</span><span></span></div>
       <div id="duzen"></div>
       <datalist id="coinListe"></datalist>
@@ -272,16 +276,21 @@ function formulOku(s){
   }
   return out;
 }
+// nakit (USDT): formuldeki sabit sayi, ornek "...+BINANCE:SUIUSDT+1500" -> 1500
+function nakitOku(s){
+  return String(s).split("+").map(t => t.trim()).filter(t => /^\d+(?:[.,]\d+)?$/.test(t))
+    .reduce((top, t) => top + parseFloat(t.replace(",", ".")), 0);
+}
 
 // formul: linkin # kismindan gelirse bu cihaza kaydedilir ve adres temizlenir; sonra duz linkle de acilir
 let formul = (()=>{ try { return localStorage.getItem(LS) || ""; } catch(e){ return ""; } })();
 const hashFormul = decodeURIComponent(location.hash.slice(1));
-if (hashFormul && formulOku(hashFormul).length) {
+if (hashFormul && (formulOku(hashFormul).length || nakitOku(hashFormul))) {
   formul = hashFormul;
   try { localStorage.setItem(LS, formul); localStorage.setItem(LS_T, String(Date.now())); } catch(e){}
   history.replaceState(null, "", location.pathname);
 }
-let liste = formulOku(formul);
+let liste = formulOku(formul), nakit = nakitOku(formul);
 const fiyat = {}, acilis = {}, onceki = {};
 let eurUsd = null, ws = null;
 
@@ -293,15 +302,15 @@ function linkGuncelle(){
 function formulKaydet(){
   duzenKirli = false;
   formul = document.getElementById("formul").value.trim();
-  liste = formulOku(formul);
+  liste = formulOku(formul); nakit = nakitOku(formul);
   try { localStorage.setItem(LS, formul); localStorage.setItem(LS_T, String(Date.now())); } catch(e){}
   linkGuncelle(); baslat(); senkron();
 }
 
 function ciz(){
   const g = document.getElementById("liste");
-  if (!liste.length) { g.innerHTML = `<div class="bos">Portföy boş. Aşağıdaki "Portföyü düzenle" bölümünden coin ve adet ekle.</div>`; document.getElementById("detay").innerHTML = ""; document.getElementById("ayar").open = true; return; }
-  let top = 0, top24 = 0, eksik = false;
+  if (!liste.length && !nakit) { g.innerHTML = `<div class="bos">Portföy boş. Aşağıdaki "Portföyü düzenle" bölümünden coin ve adet ekle.</div>`; document.getElementById("detay").innerHTML = ""; document.getElementById("ayar").open = true; return; }
+  let top = nakit, top24 = 0, eksik = false;      // nakit (USDT) = 1 $, 24s degisimi yok
   const satir = liste.map(x => {
     const p = fiyat[x.sym], o = acilis[x.sym];
     if (p == null) { eksik = true; return { ...x, deger: 0 }; }
@@ -331,6 +340,13 @@ function ciz(){
       <div class="r">${x.p == null ? "…" : fmtUsd.format(x.deger)}<small class="alt">${pay.toFixed(1).replace(".", ",")}%</small></div>
     </div>`;
   }).join("");
+  const nakitPay = top ? nakit / top * 100 : 0;
+  if (nakit) h += `<div class="satir nakitSat">
+      <div class="sm">${ikonHtml("USDT")}<div><b>USDT</b><small>Nakit</small></div></div>
+      <div class="r son">1,000</div>
+      <div class="r">0,00%</div>
+      <div class="r">${fmtUsd.format(nakit)}<small class="alt">${nakitPay.toFixed(1).replace(".", ",")}%</small></div>
+    </div>`;
   g.innerHTML = h;
   for (const x of satir) if (x.p != null) onceki[x.sym] = x.p;
   document.getElementById("adetSay").textContent = eurUsd ? "1 € = " + eurUsd.toFixed(4) + " $" : "";
@@ -366,7 +382,10 @@ function ciz(){
         <div><small>EUR/USD</small><b>${eurUsd ? eurUsd.toFixed(4) : "–"}</b></div>
         <div><small>En büyük pozisyon</small><b>${enB && enB.p != null ? enB.sym.replace(/USDT$|USDC$/, "") + " · " + (top ? (enB.deger / top * 100).toFixed(0) : 0) + "%" : "–"}</b></div>
         <div><small>Değişim 24s</small><b class="${top24 >= 0 ? "arti" : "eksi"}">${yuzYaz(yuz24)}</b></div>
-      </div>`;
+        <div><small>Kripto</small><b>${fmtUsd.format(top - nakit)} · ${(100 - nakitPay).toFixed(0)}%</b></div>
+        <div><small>Nakit (USDT)</small><b>${fmtUsd.format(nakit)} · ${nakitPay.toFixed(0)}%</b></div>
+      </div>
+      <div class="payCubuk" title="Kripto / nakit"><i style="width:${100 - nakitPay}%"></i></div>`;
   }
 
   // sekme basligi (TradingView gibi): deger ▲/▼ gunluk degisim ve yuzde
@@ -556,8 +575,9 @@ function grafikVeri(gorunumKoru){
   let zamanlar = null;
   for (const s of semboller) { const z = new Set((mumlar[s] || new Map()).keys()); zamanlar = zamanlar ? new Set([...zamanlar].filter(t => z.has(t))) : z; }
   const tlist = [...(zamanlar || [])].sort((a, b) => a - b);
+  const n0 = secili ? 0 : nakit;                                   // toplam grafikte nakit de var (sabit)
   const veri = tlist.map(t => {
-    let o = 0, h = 0, l = 0, c = 0;
+    let o = n0, h = n0, l = n0, c = n0;
     for (const sym of semboller) { const [a, b, d, e] = mumlar[sym].get(t); const q = adet[sym]; o += a*q; h += b*q; l += d*q; c += e*q; }
     return { time: t, open: o, high: h, low: l, close: c };
   });
@@ -577,7 +597,7 @@ function canliNokta(){
   if (!mumSeri || !son || ilkDeger == null) return;
   const semboller = secili ? [secili] : liste.map(x => x.sym);
   if (semboller.some(s => fiyat[s] == null)) return;
-  const deger = semboller.reduce((s, sym) => s + fiyat[sym] * liste.find(x => x.sym === sym).adet, 0);
+  const deger = semboller.reduce((s, sym) => s + fiyat[sym] * liste.find(x => x.sym === sym).adet, secili ? 0 : nakit);
   const p = PERIYOT.find(x => x.ad === periyot);
   const simdi = Math.floor(Date.now() / 1000);
   if (simdi >= mumBitis(son.time, p)) {
@@ -628,11 +648,11 @@ async function senkron(){
     const yerelT = +okuLS(LS_T, "0") || 0;
     if (uzakVar && (uzakT > yerelT || !liste.length)) {
       if (d.formul !== formul) {
-        formul = d.formul; liste = formulOku(formul);
+        formul = d.formul; liste = formulOku(formul); nakit = nakitOku(formul);
         yazLS(LS, formul); yazLS(LS_T, String(uzakT));
         await baslat();
       }
-    } else if (liste.length && (!uzakVar || yerelT > uzakT)) {
+    } else if ((liste.length || nakit) && (!uzakVar || yerelT > uzakT)) {
       const t = yerelT || Date.now();
       const w = await fetch(WORKER, { method: "POST", headers: { "Content-Type": "application/json", "X-Pin": pin }, body: JSON.stringify({ formul, t }) });
       if (w.status === 401) { pinSor("PIN yanlış"); return; }
@@ -668,7 +688,7 @@ async function ikonYukle(){
   try {
     const d = await (await fetch("https://www.binance.com/bapi/asset/v2/public/asset/asset/get-all-asset")).json();
     const m = {};
-    const lazim = new Set(liste.map(x => x.sym.replace(/USDT$|USDC$/, "")));
+    const lazim = new Set([...liste.map(x => x.sym.replace(/USDT$|USDC$/, "")), "USDT"]);
     for (const x of d.data || []) if (lazim.has(x.assetCode) && x.logoUrl) m[x.assetCode] = x.logoUrl;
     if (Object.keys(m).length) { ikonlar = { t: Date.now(), m }; try { localStorage.setItem(LS_IKON, JSON.stringify(ikonlar)); } catch(e){} ciz(); }
   } catch (e) { /* yedek ikonlar kullanilir */ }
@@ -699,6 +719,7 @@ function satirEkle(ad = "", adet = ""){
 }
 function duzenDoldur(){
   if (duzenKirli) return;
+  document.getElementById("nakitGiris").value = nakit ? String(nakit).replace(".", ",") : "";
   document.getElementById("duzen").innerHTML = "";
   if (liste.length) for (const x of liste) satirEkle(coinAd(x.sym), x.adet);
   else satirEkle();
@@ -722,19 +743,26 @@ async function sembolYukle(){
   } catch (e) { /* liste alinamazsa dogrulamasiz kaydedilir */ }
   return binanceSem;
 }
+const sayiOku = v => Number(v.replace(/\s/g, "").replace(",", "."));
+const nakitMi = v => /^(USDT|USD|\$|NAKIT)$/.test(v.trim().toUpperCase().replace(/^[A-Z]+:/, ""));
 async function duzenKaydet(){
   const satirlar = [...document.querySelectorAll("#duzen .dSatir")];
   const top = new Map(); let hata = false;
+  const ng = document.getElementById("nakitGiris");
+  let yeniNakit = ng.value.trim() ? sayiOku(ng.value) : 0;
+  ng.classList.toggle("hatali", !(yeniNakit >= 0));
+  if (!(yeniNakit >= 0)) hata = true;
   for (const d of satirlar) {
     const [c, a] = d.children;
     if (!c.value.trim() && !a.value.trim()) continue;              // bos satir
-    const sym = sembolYap(c.value), adet = Number(a.value.replace(/\s/g, "").replace(",", "."));
+    const cash = nakitMi(c.value), sym = cash ? "USDT" : sembolYap(c.value), adet = sayiOku(a.value);
     c.classList.toggle("hatali", !sym); a.classList.toggle("hatali", !(adet > 0));
     if (!sym || !(adet > 0)) { hata = true; continue; }
+    if (cash) { yeniNakit += adet; continue; }                      // coin kutusuna USDT yazildiysa nakde eklenir
     top.set(sym, (top.get(sym) || 0) + adet);                       // ayni coin iki kez yazildiysa toplanir
   }
   if (hata) return duzMesaj("Kırmızı kutuları düzelt: coin adı ve 0'dan büyük bir adet gerekli.", true);
-  if (!top.size) return duzMesaj("En az bir coin ekle.", true);
+  if (!top.size && !yeniNakit) return duzMesaj("En az bir coin ya da nakit ekle.", true);
   duzMesaj("Kontrol ediliyor…");
   const sem = await sembolYukle();
   if (sem) {
@@ -744,17 +772,21 @@ async function duzenKaydet(){
       return duzMesaj("Binance'te bulunamadı: " + yok.map(coinAd).join(", "), true);
     }
   }
-  document.getElementById("formul").value = [...top].map(([s, q]) => `${sayiYaz(q)}*BINANCE:${s}`).join("+");
+  const parca = [...top].map(([s, q]) => `${sayiYaz(q)}*BINANCE:${s}`);
+  if (yeniNakit) parca.push(sayiYaz(yeniNakit));                   // nakit formulun sonunda sabit sayi
+  document.getElementById("formul").value = parca.join("+");
   formulKaydet();
   duzMesaj("Kaydedildi ✓");
 }
 document.getElementById("ayar").addEventListener("toggle", e => { if (e.target.open) sembolYukle(); });
+document.getElementById("nakitGiris").addEventListener("input", e => { duzenKirli = true; e.target.classList.remove("hatali"); });
+document.getElementById("nakitGiris").addEventListener("keydown", e => { if (e.key === "Enter") duzenKaydet(); });
 
 async function baslat(){
   document.getElementById("formul").value = formul;
   duzenDoldur();
   linkGuncelle(); ciz();
-  if (!liste.length) { durum("", "Portföy boş"); return; }
+  if (!liste.length && !nakit) { durum("", "Portföy boş"); return; }
   periyotCiz();
   ikonYukle();
   await anlik(); canli();
