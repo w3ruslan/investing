@@ -110,6 +110,19 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
 .kaydir input{width:100%;accent-color:var(--yazi)}
 .kaydir span{text-align:right;color:var(--gri);font-variant-numeric:tabular-nums}
 .btn.ince{background:transparent;color:var(--yazi);border:1px solid var(--cizgi);font-weight:600;padding:6px 10px}
+/* portfoy duzenleyici: coin | adet kutulari */
+.duzBas,.dSatir{display:grid;grid-template-columns:1fr 1fr 30px;gap:6px;align-items:center}
+.duzBas{font-size:11px;color:var(--gri);margin-top:10px}
+.duzBas span:nth-child(2){text-align:right}
+.dSatir{margin-top:6px}
+.dSatir input{width:100%;min-width:0;padding:7px 8px;border:1px solid var(--cizgi);border-radius:6px;background:var(--panel);color:var(--yazi);font-size:13px}
+.dSatir input.coin{text-transform:uppercase;font-weight:600}
+.dSatir input.adet{text-align:right;font-variant-numeric:tabular-nums}
+.dSatir input.hatali{border-color:var(--kir);background:var(--kirA)}
+.dSatir input:focus{outline:none;border-color:var(--mavi)}
+.duzMesaj{min-height:16px}
+.duzMesaj.hata{color:var(--kir)}
+.formulKutu{margin-top:10px}
 .not{font-size:11.5px;color:var(--gri);margin-top:8px;line-height:1.45}
 .bos{padding:24px 14px;text-align:center;color:var(--gri)}
 
@@ -129,6 +142,7 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
   .sahne{height:58vh;border-right:0;border-bottom:1px solid var(--cizgi)}
   .liste{max-height:none;overflow:visible}
   .toplam .deger{font-size:18px}
+  .dSatir input{font-size:16px}   /* iPhone'da kutuya dokununca sayfa yakinlasmasin */
 }
 </style>
 </head>
@@ -162,9 +176,18 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
     <div class="detay" id="detay"></div>
     <details class="ayar" id="ayar">
       <summary>⚙ Portföyü düzenle · yardım</summary>
-      <div class="not">TradingView formülünü yapıştır (örnek: <code>0.5*BINANCE:BTCUSDT+10*BINANCE:SOLUSDT</code>). Adetler sitenin koduna yazılmaz; bu tarayıcıda ve bulutta (PIN'li) saklanır.</div>
-      <textarea id="formul" spellcheck="false"></textarea>
-      <button class="btn" onclick="formulKaydet()">Kaydet</button>
+      <div class="not">Coin adını ve adedini yaz (örnek: <b>BTC</b> · <b>0,5</b>). Adetler sitenin koduna yazılmaz; bu tarayıcıda ve bulutta (PIN'li) saklanır.</div>
+      <div class="duzBas"><span>Coin</span><span>Adet</span><span></span></div>
+      <div id="duzen"></div>
+      <datalist id="coinListe"></datalist>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px"><button class="btn ince" onclick="satirEkle().focus()">+ Coin ekle</button><button class="btn" onclick="duzenKaydet()">Kaydet</button></div>
+      <div class="not duzMesaj" id="duzMesaj"></div>
+      <details class="formulKutu">
+        <summary>TradingView formülü (içe / dışa aktar)</summary>
+        <div class="not">Kutulardaki portföy burada formül olarak durur. TradingView'e kopyalayabilir ya da bir formül yapıştırıp kaydedebilirsin (örnek: <code>0.5*BINANCE:BTCUSDT+10*BINANCE:SOLUSDT</code>).</div>
+        <textarea id="formul" spellcheck="false"></textarea>
+        <button class="btn" onclick="formulKaydet()">Formülü kaydet</button>
+      </details>
       <div class="not"><b>Bulut senkronu:</b> <span id="bulutDurum">–</span> · <a href="#" onclick="pinSor();return false">PIN gir</a> · <a href="#" onclick="pinUnut();return false">PIN'i unut</a></div>
       <div class="not">Yedek yol (PIN'siz): bu linki bir cihazda bir kez açarsan o cihaz portföyü hatırlar: <a id="link" href="#">link</a></div>
       <div class="not"><b>E-kâğıt tonu</b> (yalnız ◐ E-kâğıt temasında) — e-okuyucunun yanına koyup kaydırarak eşitle:</div>
@@ -268,6 +291,7 @@ function linkGuncelle(){
   const a = document.getElementById("link"); a.href = url; a.textContent = url.length > 70 ? url.slice(0, 70) + "…" : url;
 }
 function formulKaydet(){
+  duzenKirli = false;
   formul = document.getElementById("formul").value.trim();
   liste = formulOku(formul);
   try { localStorage.setItem(LS, formul); localStorage.setItem(LS_T, String(Date.now())); } catch(e){}
@@ -276,7 +300,7 @@ function formulKaydet(){
 
 function ciz(){
   const g = document.getElementById("liste");
-  if (!liste.length) { g.innerHTML = `<div class="bos">Portföy boş. Aşağıdan "Portföyü düzenle"yi açıp TradingView formülünü yapıştır.</div>`; document.getElementById("detay").innerHTML = ""; document.getElementById("ayar").open = true; return; }
+  if (!liste.length) { g.innerHTML = `<div class="bos">Portföy boş. Aşağıdaki "Portföyü düzenle" bölümünden coin ve adet ekle.</div>`; document.getElementById("detay").innerHTML = ""; document.getElementById("ayar").open = true; return; }
   let top = 0, top24 = 0, eksik = false;
   const satir = liste.map(x => {
     const p = fiyat[x.sym], o = acilis[x.sym];
@@ -650,8 +674,85 @@ async function ikonYukle(){
   } catch (e) { /* yedek ikonlar kullanilir */ }
 }
 
+// ============================================================================
+//  PORTFOY DUZENLEYICI  (coin | adet kutulari)
+//  Kaydedince kutular formule cevrilir: senkron ve link ayni formulu kullanir.
+// ============================================================================
+let duzenKirli = false;          // kaydedilmemis degisiklik varsa buluttan gelen veri kutulari ezmesin
+let binanceSem = null;           // Binance'teki semboller (dogrulama + oneri listesi)
+const coinAd = sym => sym.replace(/USDT$|USDC$/, "");
+const sayiYaz = q => q.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 10 });
+function duzMesaj(t, hata){ const el = document.getElementById("duzMesaj"); el.textContent = t || ""; el.className = "not duzMesaj" + (hata ? " hata" : ""); }
+
+function satirEkle(ad = "", adet = ""){
+  const d = document.createElement("div"); d.className = "dSatir";
+  d.innerHTML = `<input class="coin" list="coinListe" placeholder="BTC" autocapitalize="characters" autocomplete="off" spellcheck="false">` +
+                `<input class="adet" inputmode="decimal" placeholder="0,5" autocomplete="off">` +
+                `<button class="ikonBtn" type="button" title="Sil">✕</button>`;
+  const [c, a, b] = d.children;
+  c.value = ad; a.value = adet === "" ? "" : String(adet).replace(".", ",");
+  b.onclick = () => { d.remove(); duzenKirli = true; if (!document.getElementById("duzen").children.length) satirEkle(); };
+  d.oninput = e => { duzenKirli = true; e.target.classList.remove("hatali"); };
+  d.onkeydown = e => { if (e.key === "Enter") duzenKaydet(); };
+  document.getElementById("duzen").appendChild(d);
+  return c;
+}
+function duzenDoldur(){
+  if (duzenKirli) return;
+  document.getElementById("duzen").innerHTML = "";
+  if (liste.length) for (const x of liste) satirEkle(coinAd(x.sym), x.adet);
+  else satirEkle();
+}
+// "btc", "BTCUSDT", "BINANCE:BTCUSDT", "btc/usdt" -> "BTCUSDT"
+function sembolYap(v){
+  let s = v.trim().toUpperCase().replace(/^[A-Z]+:/, "").replace(/[^A-Z0-9]/g, "");
+  if (!s) return "";
+  if (s === "USDT" || s === "USDC" || !/(USDT|USDC)$/.test(s)) s += "USDT";
+  return s;
+}
+async function sembolYukle(){
+  if (binanceSem) return binanceSem;
+  try {
+    const d = await (await fetch("https://api.binance.com/api/v3/ticker/price")).json();
+    if (Array.isArray(d)) {
+      binanceSem = new Set(d.map(x => x.symbol));
+      const adlar = [...binanceSem].filter(s => /^[A-Z0-9]+USDT$/.test(s)).map(coinAd).sort();
+      document.getElementById("coinListe").innerHTML = adlar.map(a => `<option value="${a}">`).join("");
+    }
+  } catch (e) { /* liste alinamazsa dogrulamasiz kaydedilir */ }
+  return binanceSem;
+}
+async function duzenKaydet(){
+  const satirlar = [...document.querySelectorAll("#duzen .dSatir")];
+  const top = new Map(); let hata = false;
+  for (const d of satirlar) {
+    const [c, a] = d.children;
+    if (!c.value.trim() && !a.value.trim()) continue;              // bos satir
+    const sym = sembolYap(c.value), adet = Number(a.value.replace(/\s/g, "").replace(",", "."));
+    c.classList.toggle("hatali", !sym); a.classList.toggle("hatali", !(adet > 0));
+    if (!sym || !(adet > 0)) { hata = true; continue; }
+    top.set(sym, (top.get(sym) || 0) + adet);                       // ayni coin iki kez yazildiysa toplanir
+  }
+  if (hata) return duzMesaj("Kırmızı kutuları düzelt: coin adı ve 0'dan büyük bir adet gerekli.", true);
+  if (!top.size) return duzMesaj("En az bir coin ekle.", true);
+  duzMesaj("Kontrol ediliyor…");
+  const sem = await sembolYukle();
+  if (sem) {
+    const yok = [...top.keys()].filter(s => !sem.has(s));
+    if (yok.length) {
+      for (const d of satirlar) if (yok.includes(sembolYap(d.children[0].value))) d.children[0].classList.add("hatali");
+      return duzMesaj("Binance'te bulunamadı: " + yok.map(coinAd).join(", "), true);
+    }
+  }
+  document.getElementById("formul").value = [...top].map(([s, q]) => `${sayiYaz(q)}*BINANCE:${s}`).join("+");
+  formulKaydet();
+  duzMesaj("Kaydedildi ✓");
+}
+document.getElementById("ayar").addEventListener("toggle", e => { if (e.target.open) sembolYukle(); });
+
 async function baslat(){
   document.getElementById("formul").value = formul;
+  duzenDoldur();
   linkGuncelle(); ciz();
   if (!liste.length) { durum("", "Portföy boş"); return; }
   periyotCiz();
