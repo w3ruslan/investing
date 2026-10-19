@@ -292,7 +292,7 @@ if (hashFormul && (formulOku(hashFormul).length || nakitOku(hashFormul))) {
 }
 let liste = formulOku(formul), nakit = nakitOku(formul);
 const fiyat = {}, onceki = {};
-// gunluk degisim: bu cihazin saatine gore bugun 00:00'daki fiyattan (Binance 24s kayan pencere degil)
+// gunluk degisim: Binance gunluk mumunun acilisindan (UTC 00:00, TradingView gibi; 24s kayan pencere degil)
 let gece = {}, geceGun = "";
 let eurUsd = null, ws = null;
 
@@ -371,7 +371,7 @@ function ciz(){
       <div class="dIzgara r">
         <div><small>Adet</small><b>${x.adet.toLocaleString("fr-FR")}</b></div>
         <div><small>Değer</small><b>${fmtUsd.format(x.deger)}${eurUsd ? " · " + fmtEur.format(x.deger / eurUsd) : ""}</b></div>
-        <div><small>Bugün kâr / zarar (00:00'dan)</small><b class="${x.deg24 >= 0 ? "arti" : "eksi"}">${isaret(x.deg24)}${fmtUsd.format(x.deg24)}</b></div>
+        <div><small>Bugün kâr / zarar (UTC 00:00)</small><b class="${x.deg24 >= 0 ? "arti" : "eksi"}">${isaret(x.deg24)}${fmtUsd.format(x.deg24)}</b></div>
         <div><small>Portföy payı</small><b>${pay.toFixed(1).replace(".", ",")}%</b></div>
       </div>
       <div class="payCubuk"><i style="width:${pay}%"></i></div>`;
@@ -383,7 +383,7 @@ function ciz(){
         <div><small>Euro karşılığı</small><b>${eurUsd ? fmtEur.format(top / eurUsd) : "–"}</b></div>
         <div><small>EUR/USD</small><b>${eurUsd ? eurUsd.toFixed(4) : "–"}</b></div>
         <div><small>En büyük pozisyon</small><b>${enB && enB.p != null ? enB.sym.replace(/USDT$|USDC$/, "") + " · " + (top ? (enB.deger / top * 100).toFixed(0) : 0) + "%" : "–"}</b></div>
-        <div><small>Bugün (00:00'dan)</small><b class="${top24 >= 0 ? "arti" : "eksi"}">${yuzYaz(yuz24)}</b></div>
+        <div><small>Bugün (UTC 00:00)</small><b class="${top24 >= 0 ? "arti" : "eksi"}">${yuzYaz(yuz24)}</b></div>
         <div><small>Kripto</small><b>${fmtUsd.format(top - nakit)} · ${(100 - nakitPay).toFixed(0)}%</b></div>
         <div><small>Nakit (USDT)</small><b>${fmtUsd.format(nakit)} · ${nakitPay.toFixed(0)}%</b></div>
       </div>
@@ -415,15 +415,15 @@ async function anlik(){
   } catch (e) { durum("hata", "Fiyat alınamadı: " + e.message); return false; }
 }
 
-// bugun 00:00'daki fiyat: o dakikanin 1dk mumunun acilisi (gun degisince ya da yeni coin eklenince yeniden)
+// bugunun acilis fiyati: Binance gunluk mumunun acilisi (UTC 00:00), TradingView'deki gunluk degisimle ayni
+// (gun degisince ya da yeni coin eklenince yeniden)
 async function geceYukle(){
-  const g0 = new Date(); g0.setHours(0, 0, 0, 0);
-  const gun = g0.toDateString();
+  const gun = new Date().toISOString().slice(0, 10);              // UTC gunu
   if (gun !== geceGun) { gece = {}; geceGun = gun; }
   const eksik = liste.filter(x => gece[x.sym] == null);
   if (!eksik.length) return;
   const sonuc = await Promise.all(eksik.map(x =>
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=1m&startTime=${g0.getTime()}&limit=1`)
+    fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=1d&startTime=${Date.parse(gun)}&limit=1`)
       .then(r => r.json()).catch(() => null)));
   if (gun !== geceGun) return;                                      // bu arada gun degisti
   eksik.forEach((x, i) => { const k = sonuc[i]; if (Array.isArray(k) && k.length) gece[x.sym] = +k[0][1]; });
@@ -820,7 +820,7 @@ async function baslat(){
 }
 setInterval(() => {
   if (!ws || ws.readyState !== 1) anlik();
-  else geceYukle().then(ciz);                                       // gece yarisi gecince yeni gunun 00:00 fiyati
+  else geceYukle().then(ciz);                                       // UTC gun degisince yeni gunun acilis fiyati
 }, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) anlik(); });
 temaUygula();
