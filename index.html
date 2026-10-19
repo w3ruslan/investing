@@ -291,7 +291,9 @@ if (hashFormul && (formulOku(hashFormul).length || nakitOku(hashFormul))) {
   history.replaceState(null, "", location.pathname);
 }
 let liste = formulOku(formul), nakit = nakitOku(formul);
-const fiyat = {}, acilis = {}, onceki = {};
+const fiyat = {}, onceki = {};
+// gunluk degisim: bu cihazin saatine gore bugun 00:00'daki fiyattan (Binance 24s kayan pencere degil)
+let gece = {}, geceGun = "";
 let eurUsd = null, ws = null;
 
 function durum(t, y){ document.getElementById("nokta").className = "nokta " + t; document.getElementById("durumYazi").textContent = y; }
@@ -312,7 +314,7 @@ function ciz(){
   if (!liste.length && !nakit) { g.innerHTML = `<div class="bos">Portföy boş. Aşağıdaki "Portföyü düzenle" bölümünden coin ve adet ekle.</div>`; document.getElementById("detay").innerHTML = ""; document.getElementById("ayar").open = true; return; }
   let top = nakit, top24 = 0, eksik = false;      // nakit (USDT) = 1 $, 24s degisimi yok
   const satir = liste.map(x => {
-    const p = fiyat[x.sym], o = acilis[x.sym];
+    const p = fiyat[x.sym], o = gece[x.sym];
     if (p == null) { eksik = true; return { ...x, deger: 0 }; }
     const deger = p * x.adet, deg24 = o ? (p - o) * x.adet : 0;
     top += deger; top24 += deg24;
@@ -326,7 +328,7 @@ function ciz(){
     <div class="sm"><span class="harf">$</span><div><b>Toplam</b><small>${liste.length} coin</small></div></div>
     <div class="r">${fmtUsd.format(top)}</div>
     <div class="r ${top24 >= 0 ? "arti" : "eksi"}">${yuzYaz(yuz24)}</div>
-    <div class="r ${top24 >= 0 ? "arti" : "eksi"}">${isaret(top24)}${fmtUsd.format(top24)}<small class="alt">24s</small></div>
+    <div class="r ${top24 >= 0 ? "arti" : "eksi"}">${isaret(top24)}${fmtUsd.format(top24)}<small class="alt">bugün</small></div>
   </div>`;
   h += satir.map(x => {
     const ad = x.sym.replace(/USDT$|USDC$/, "");
@@ -365,11 +367,11 @@ function ciz(){
   if (x && x.p != null) {
     const ad = x.sym.replace(/USDT$|USDC$/, ""), yuz = x.o ? (x.p / x.o - 1) * 100 : 0, pay = top ? x.deger / top * 100 : 0;
     d.innerHTML = `<div class="dBas">${ikonHtml(ad)}<div><b>${ad}</b><small>${x.sym} · Binance</small></div></div>
-      <div class="dFiyat r">${fiyatYaz(x.p)} $<span class="${yuz >= 0 ? "arti" : "eksi"}">${isaret(x.p - x.o)}${fiyatYaz(Math.abs(x.p - x.o)).replace(/^/, x.p - x.o < 0 ? "-" : "")} (${yuzYaz(yuz)})</span></div>
+      <div class="dFiyat r">${fiyatYaz(x.p)} $${x.o ? `<span class="${yuz >= 0 ? "arti" : "eksi"}">${isaret(x.p - x.o)}${fiyatYaz(Math.abs(x.p - x.o)).replace(/^/, x.p - x.o < 0 ? "-" : "")} (${yuzYaz(yuz)})</span>` : ""}</div>
       <div class="dIzgara r">
         <div><small>Adet</small><b>${x.adet.toLocaleString("fr-FR")}</b></div>
         <div><small>Değer</small><b>${fmtUsd.format(x.deger)}${eurUsd ? " · " + fmtEur.format(x.deger / eurUsd) : ""}</b></div>
-        <div><small>24s kâr / zarar</small><b class="${x.deg24 >= 0 ? "arti" : "eksi"}">${isaret(x.deg24)}${fmtUsd.format(x.deg24)}</b></div>
+        <div><small>Bugün kâr / zarar (00:00'dan)</small><b class="${x.deg24 >= 0 ? "arti" : "eksi"}">${isaret(x.deg24)}${fmtUsd.format(x.deg24)}</b></div>
         <div><small>Portföy payı</small><b>${pay.toFixed(1).replace(".", ",")}%</b></div>
       </div>
       <div class="payCubuk"><i style="width:${pay}%"></i></div>`;
@@ -381,7 +383,7 @@ function ciz(){
         <div><small>Euro karşılığı</small><b>${eurUsd ? fmtEur.format(top / eurUsd) : "–"}</b></div>
         <div><small>EUR/USD</small><b>${eurUsd ? eurUsd.toFixed(4) : "–"}</b></div>
         <div><small>En büyük pozisyon</small><b>${enB && enB.p != null ? enB.sym.replace(/USDT$|USDC$/, "") + " · " + (top ? (enB.deger / top * 100).toFixed(0) : 0) + "%" : "–"}</b></div>
-        <div><small>Değişim 24s</small><b class="${top24 >= 0 ? "arti" : "eksi"}">${yuzYaz(yuz24)}</b></div>
+        <div><small>Bugün (00:00'dan)</small><b class="${top24 >= 0 ? "arti" : "eksi"}">${yuzYaz(yuz24)}</b></div>
         <div><small>Kripto</small><b>${fmtUsd.format(top - nakit)} · ${(100 - nakitPay).toFixed(0)}%</b></div>
         <div><small>Nakit (USDT)</small><b>${fmtUsd.format(nakit)} · ${nakitPay.toFixed(0)}%</b></div>
       </div>
@@ -406,10 +408,25 @@ async function anlik(){
     if (!Array.isArray(d)) throw new Error(d.msg || "veri yok");
     for (const t of d) {
       if (t.symbol === "EURUSDT") eurUsd = +t.lastPrice;
-      else { fiyat[t.symbol] = +t.lastPrice; acilis[t.symbol] = +t.openPrice; }
+      else fiyat[t.symbol] = +t.lastPrice;
     }
+    await geceYukle();
     ciz(); return true;
   } catch (e) { durum("hata", "Fiyat alınamadı: " + e.message); return false; }
+}
+
+// bugun 00:00'daki fiyat: o dakikanin 1dk mumunun acilisi (gun degisince ya da yeni coin eklenince yeniden)
+async function geceYukle(){
+  const g0 = new Date(); g0.setHours(0, 0, 0, 0);
+  const gun = g0.toDateString();
+  if (gun !== geceGun) { gece = {}; geceGun = gun; }
+  const eksik = liste.filter(x => gece[x.sym] == null);
+  if (!eksik.length) return;
+  const sonuc = await Promise.all(eksik.map(x =>
+    fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=1m&startTime=${g0.getTime()}&limit=1`)
+      .then(r => r.json()).catch(() => null)));
+  if (gun !== geceGun) return;                                      // bu arada gun degisti
+  eksik.forEach((x, i) => { const k = sonuc[i]; if (Array.isArray(k) && k.length) gece[x.sym] = +k[0][1]; });
 }
 
 function canli(){
@@ -420,7 +437,7 @@ function canli(){
   ws.onmessage = e => {
     const d = JSON.parse(e.data).data;
     if (d.s === "EURUSDT") eurUsd = +d.c;
-    else { fiyat[d.s] = +d.c; acilis[d.s] = +d.o; }
+    else fiyat[d.s] = +d.c;
     cizSonra();
   };
   ws.onclose = () => { durum("bekle", "Bağlantı koptu, yeniden bağlanıyor…"); setTimeout(canli, 3000); };
@@ -503,20 +520,30 @@ function grafikKur(){
     timeScale: { borderVisible: false, timeVisible: true, rightOffset: 3, fixLeftEdge: true, minBarSpacing: 0.5, rightBarStaysOnScroll: true },
     crosshair: { mode: 0, vertLine: { width: 1, style: 3 }, horzLine: { width: 1, style: 3 } },
     localization: { priceFormatter: v => v >= 1000 ? Math.round(v).toLocaleString("fr-FR") + " $" : v.toLocaleString("fr-FR", { maximumFractionDigits: 4 }) + " $" },
-    // TradingView gibi: tekerlek = yakinlastir/uzaklastir, surukle = kaydir, telefonda iki parmak
-    handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+    // TradingView gibi: dikey tekerlek = yakinlastir/uzaklastir, yatay (trackpad iki parmak) = kaydir, surukle = kaydir
+    handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: { time: true, price: true } },
   });
+  // trackpad eksen kilidi: hareket cogunlukla yataysa yalniz kaydir, dikeyse yalniz yakinlastir
+  // (yoksa iki parmakla yana kaydirirken kucuk dikey kayma grafigi yakinlastirip saga topluyordu)
+  el.addEventListener("wheel", e => {
+    if (e.kilitli || !e.deltaX || !e.deltaY) return;
+    e.stopPropagation(); e.preventDefault();
+    const yatay = Math.abs(e.deltaX) >= Math.abs(e.deltaY);
+    const yeni = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaMode: e.deltaMode, clientX: e.clientX, clientY: e.clientY,
+      deltaX: yatay ? e.deltaX : 0, deltaY: yatay ? 0 : e.deltaY, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey });
+    yeni.kilitli = true; e.target.dispatchEvent(yeni);
+  }, { capture: true, passive: false });
   const ortak = { priceLineVisible: true, priceLineStyle: 2, priceLineWidth: 1, lastValueVisible: true };
   mumSeri = chart.addCandlestickSeries({ ...ortak });
   cizgiSeri = chart.addAreaSeries({ ...ortak, lineWidth: 2 });
   grafikRenk();
   tipUygula();
   new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })).observe(el);
-  // sola (gecmise) dayaninca daha eski mumlari yukle
+  // sola (gecmise) yaklasinca daha eski mumlari onceden yukle (sol kenara dayanmadan, bir ekran once)
   chart.timeScale().subscribeVisibleLogicalRangeChange(r => {
     if (!r) return;
-    if (r.from < 5) eskiYukle();
+    if (r.from < Math.max(50, r.to - r.from)) eskiYukle();
     // degisim = ekranda gorunen ilk mumdan bu yana
     const d = mumSeri.data(); if (!d.length) return;
     const i = Math.min(d.length - 1, Math.max(0, Math.ceil(r.from)));
@@ -559,11 +586,10 @@ async function eskiYukle(){
     }));
     if (PERIYOT.find(x => x.ad === periyot).iv !== iv) return;   // bu arada periyot degisti
     liste.forEach((x, i) => { if (Array.isArray(sonuc[i])) for (const k of sonuc[i]) mumlar[x.sym].set(k[0] / 1000, [+k[1], +k[2], +k[3], +k[4]]); });
-    const ts = chart.timeScale(), r = ts.getVisibleLogicalRange(), once = mumSeri.data().length;
+    // gorunen tarih araligini kutuphane kendisi korur; elle kaydirmak surukleme ile cakisip ziplatiyordu
+    const once = mumSeri.data().length;
     grafikVeri(true);
-    const fark = mumSeri.data().length - once;
-    if (fark <= 0) eskiBitti = true;                                  // daha eski veri yok
-    else if (r) ts.setVisibleLogicalRange({ from: r.from + fark, to: r.to + fark });
+    if (mumSeri.data().length <= once) eskiBitti = true;             // daha eski veri yok
   } catch (e) { /* sonra tekrar denenir */ }
   finally { eskiYukleniyor = false; }
 }
@@ -792,7 +818,10 @@ async function baslat(){
   await anlik(); canli();
   grafikYukle();
 }
-setInterval(() => { if (!ws || ws.readyState !== 1) anlik(); }, 15000);
+setInterval(() => {
+  if (!ws || ws.readyState !== 1) anlik();
+  else geceYukle().then(ciz);                                       // gece yarisi gecince yeni gunun 00:00 fiyati
+}, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) anlik(); });
 temaUygula();
 baslat().then(senkron);
