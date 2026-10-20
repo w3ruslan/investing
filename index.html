@@ -747,7 +747,10 @@ function duzenDoldur(){
   if (duzenKirli) return;
   document.getElementById("nakitGiris").value = nakit ? String(nakit).replace(".", ",") : "";
   document.getElementById("duzen").innerHTML = "";
-  if (liste.length) for (const x of liste) satirEkle(coinAd(x.sym), x.adet);
+  // siralama: pozisyonun bugunku degeri (adet x fiyat), en buyuk ustte; fiyati henuz gelmeyen en altta
+  const deger = x => fiyat[x.sym] != null ? fiyat[x.sym] * x.adet : -1;
+  const sirali = [...liste].sort((a, b) => deger(b) - deger(a));
+  if (sirali.length) for (const x of sirali) satirEkle(coinAd(x.sym), x.adet);
   else satirEkle();
 }
 // "btc", "BTCUSDT", "BINANCE:BTCUSDT", "btc/usdt" -> "BTCUSDT"
@@ -804,7 +807,7 @@ async function duzenKaydet(){
   formulKaydet();
   duzMesaj("Kaydedildi ✓");
 }
-document.getElementById("ayar").addEventListener("toggle", e => { if (e.target.open) sembolYukle(); });
+document.getElementById("ayar").addEventListener("toggle", e => { if (e.target.open) { duzenDoldur(); sembolYukle(); } });   // acilinca guncel degere gore sirala
 document.getElementById("nakitGiris").addEventListener("input", e => { duzenKirli = true; e.target.classList.remove("hatali"); });
 document.getElementById("nakitGiris").addEventListener("keydown", e => { if (e.key === "Enter") duzenKaydet(); });
 
@@ -816,6 +819,7 @@ async function baslat(){
   periyotCiz();
   ikonYukle();
   await anlik(); canli();
+  duzenDoldur();                                                    // fiyatlar geldi: kutulari degere gore sirala
   grafikYukle();
 }
 setInterval(() => {
