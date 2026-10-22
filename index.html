@@ -82,6 +82,10 @@ a{color:var(--mavi)}
 .satir small.alt{display:block;font-size:11px;color:var(--gri)}
 .satir.toplamSat{border-bottom:1px solid var(--cizgi)}
 .ikon{width:22px;height:22px;border-radius:50%;flex:none;object-fit:cover;background:var(--panel)}
+.dz{font-size:10px;margin-left:4px;font-weight:800}
+.dz.al{color:var(--yes)} .dz.al2{color:var(--yes);opacity:.6} .dz.sat{color:var(--kir)} .dz.sat2{color:var(--kir);opacity:.6}
+.ayarSat{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--yazi);cursor:pointer}
+.ayarSat input{accent-color:var(--yazi)}
 .harf{width:22px;height:22px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;background:var(--mavi);color:#fff;font-weight:800;font-size:9px}
 .flash-up .son{animation:fu 1s}.flash-dn .son{animation:fd 1s}
 @keyframes fu{from{background:var(--yesA)}to{background:transparent}}
@@ -198,7 +202,11 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
       <label class="kaydir">Aydınlık<input type="range" id="kL" min="38" max="94" step="1" oninput="kagitDegis()"><span id="kLd"></span></label>
       <label class="kaydir">Sıcaklık<input type="range" id="kS" min="0" max="45" step="1" oninput="kagitDegis()"><span id="kSd"></span></label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn ince" onclick="kagitHazir('kobo')">Kobo</button><button class="btn ince" onclick="kagitHazir('koyu')">Koyu kâğıt</button><button class="btn ince" onclick="kagitHazir('acik')">Açık kâğıt</button></div>
-      <div class="not"><b>Grafik:</b> üstteki düğmeler bir mumun süresi (5dk, 1 saat, 4 saat, 1 gün, 1 hafta, 1 ay); sol üstteki değişim ekranda görünen ilk mumdan bu yana · fare tekerleği = mum sayısını artır/azalt · sürükle = geçmişe kaydır · telefonda iki parmakla yakınlaştır · zaman eksenine çift tık = sıfırla. Listeden bir coine tıkla: o coinin grafiği. Geçmiş, bugünkü adetlerin o tarihte de elde olduğu varsayımıyla çizilir.</div>
+      <div class="not"><b>Grafik seçenekleri</b></div>
+      <label class="ayarSat"><input type="checkbox" id="ayDelta" onchange="ayarGrafik()"> Sert alım / satım işaretleri (delta)</label>
+      <label class="ayarSat"><input type="checkbox" id="ayTum" onchange="ayarGrafik()"> Tüm geçmiş (coinler listelendikleri günden itibaren eklenir)</label>
+      <div class="not"><b>Sert alım / satım:</b> Binance'in gerçek agresif (taker) alış verisinden. Bir mumun alış-satış farkı (delta), o coinin son 100 mumuna göre 3 standart sapma üstündeyse <b>▲ SERT AL</b>, altındaysa ✕ işareti. Listede ▲ / ▴ / ▾ / ▼ son kapanan mumun durumu. Ölçüm (5 coin, 4 yıl, 4 saatlik): sert alımdan sonraki 6 mumda fiyat ortalamadan +0,9% iyi gitti, yükseliş %55; sert satış yön vermedi — tek başına al/sat sinyali değil.</div>
+      <div class="not"><b>Grafik:</b> üstteki düğmeler bir mumun süresi (5dk, 1 saat, 4 saat, 1 gün, 1 hafta, 1 ay); sol üstteki değişim ekranda görünen ilk mumdan bu yana · fare tekerleği = mum sayısını artır/azalt · sürükle = geçmişe kaydır · telefonda iki parmakla yakınlaştır · zaman eksenine çift tık = sıfırla. Listeden bir coine tıkla: o coinin grafiği. Geçmiş, bugünkü adetlerin o tarihte de elde olduğu varsayımıyla çizilir; "Tüm geçmiş" açıkken henüz listelenmemiş coin o tarihte sıfır sayılır (grafikte +ONDO gibi işaretli).</div>
     </details>
   </aside>
 </div>
@@ -336,7 +344,7 @@ function ciz(){
     const pay = top ? x.deger / top * 100 : 0;
     const yon = onceki[x.sym] == null || x.p == null ? "" : x.p > onceki[x.sym] ? "flash-up" : x.p < onceki[x.sym] ? "flash-dn" : "";
     return `<div class="satir ${yon} ${secili === x.sym ? "secili" : ""}" onclick="secimYap('${x.sym}')">
-      <div class="sm">${ikonHtml(ad)}<div><b>${ad}</b><small>${x.adet.toLocaleString("fr-FR")}</small></div></div>
+      <div class="sm">${ikonHtml(ad)}<div><b>${ad}${deltaIsaret(x.sym)}</b><small>${x.adet.toLocaleString("fr-FR")}</small></div></div>
       <div class="r son">${x.p == null ? "…" : fiyatYaz(x.p)}</div>
       <div class="r ${yuz == null ? "" : yuz >= 0 ? "arti" : "eksi"}">${yuz == null ? "–" : yuzYaz(yuz)}</div>
       <div class="r">${x.p == null ? "…" : fmtUsd.format(x.deger)}<small class="alt">${pay.toFixed(1).replace(".", ",")}%</small></div>
@@ -373,6 +381,10 @@ function ciz(){
         <div><small>Değer</small><b>${fmtUsd.format(x.deger)}${eurUsd ? " · " + fmtEur.format(x.deger / eurUsd) : ""}</b></div>
         <div><small>Bugün kâr / zarar (UTC 00:00)</small><b class="${x.deg24 >= 0 ? "arti" : "eksi"}">${isaret(x.deg24)}${fmtUsd.format(x.deg24)}</b></div>
         <div><small>Portföy payı</small><b>${pay.toFixed(1).replace(".", ",")}%</b></div>
+        ${(() => { const ds = ayarAcik("investingDelta") ? deltaSon(x.sym) : null; if (!ds || ds.z == null) return "";
+          const z = ds.z, dur = z >= DZ_ESIK ? "SERT ALIM" : z >= 1.5 ? "alıcılar güçlü" : z <= -DZ_ESIK ? "sert satış" : z <= -1.5 ? "satıcılar güçlü" : "normal";
+          return `<div><small>Delta · son kapanan mum</small><b class="${z >= 1.5 ? "arti" : z <= -1.5 ? "eksi" : ""}">${dur} (z ${z.toFixed(1).replace(".", ",")})</b></div>
+                  <div><small>Son sert alım</small><b>${ds.sonAl == null ? "–" : ds.sonAl === 0 ? "son mum" : ds.sonAl + " mum önce"}</b></div>`; })()}
       </div>
       <div class="payCubuk"><i style="width:${pay}%"></i></div>`;
   } else {
@@ -508,6 +520,7 @@ function grafikRenk(){
   });
   mumSeri.applyOptions({ ...R.mum, priceLineColor: R.cz });
   cizgiSeri.applyOptions({ ...R.cizgi, priceLineColor: R.cz });
+  if (mumSeri.data().length) grafikVeri(true);    // isaret ve delta renkleri temaya gore
 }
 
 function grafikKur(){
@@ -558,8 +571,8 @@ async function grafikYukle(){
   try {
     const sonuc = await Promise.all(liste.map(x =>
       fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=${p.iv}&limit=1000`).then(r => r.json())));
-    mumlar = {}; eskiBitti = false;
-    liste.forEach((x, i) => { const m = new Map(); if (Array.isArray(sonuc[i])) for (const k of sonuc[i]) m.set(k[0] / 1000, [+k[1], +k[2], +k[3], +k[4]]); mumlar[x.sym] = m; });
+    mumlar = {}; eskiBitti = false; coinTam = {};
+    liste.forEach((x, i) => { const m = new Map(); if (Array.isArray(sonuc[i])) { for (const k of sonuc[i]) m.set(k[0] / 1000, mumDiz(k)); if (sonuc[i].length < 1000) coinTam[x.sym] = true; } mumlar[x.sym] = m; });
     grafikVeri();
   } catch (e) { document.getElementById("gDegisim").textContent = "Grafik alınamadı"; }
 }
@@ -573,19 +586,22 @@ function gorunumSifirla(){
   ts.resetTimeScale();
   chart.priceScale("right").applyOptions({ autoScale: true });
 }
-let eskiYukleniyor = false, eskiBitti = false;
+let eskiYukleniyor = false, eskiBitti = false, coinTam = {};
+// Binance mumu -> [acilis, tepe, dip, kapanis, hacim, taker alis hacmi]
+const mumDiz = k => [+k[1], +k[2], +k[3], +k[4], +k[5], +k[9]];
 async function eskiYukle(){
   if (eskiYukleniyor || eskiBitti || !mumSeri || !liste.length) return;
   eskiYukleniyor = true;
   const p = PERIYOT.find(x => x.ad === periyot), iv = p.iv;
   try {
     const sonuc = await Promise.all(liste.map(x => {
-      const m = mumlar[x.sym]; if (!m || !m.size) return null;
+      const m = mumlar[x.sym]; if (!m || !m.size || coinTam[x.sym]) return null;   // listelenme gunune ulasilan coin icin istek yok
       const ilk = Math.min(...m.keys());
       return fetch(`https://api.binance.com/api/v3/klines?symbol=${x.sym}&interval=${iv}&limit=1000&endTime=${ilk * 1000 - 1}`).then(r => r.json());
     }));
     if (PERIYOT.find(x => x.ad === periyot).iv !== iv) return;   // bu arada periyot degisti
-    liste.forEach((x, i) => { if (Array.isArray(sonuc[i])) for (const k of sonuc[i]) mumlar[x.sym].set(k[0] / 1000, [+k[1], +k[2], +k[3], +k[4]]); });
+    liste.forEach((x, i) => { if (Array.isArray(sonuc[i])) { for (const k of sonuc[i]) mumlar[x.sym].set(k[0] / 1000, mumDiz(k)); if (sonuc[i].length < 1000) coinTam[x.sym] = true; } });
+    if (liste.every(x => coinTam[x.sym])) eskiBitti = true;
     // gorunen tarih araligini kutuphane kendisi korur; elle kaydirmak surukleme ile cakisip ziplatiyordu
     const once = mumSeri.data().length;
     grafikVeri(true);
@@ -594,28 +610,126 @@ async function eskiYukle(){
   finally { eskiYukleniyor = false; }
 }
 
+// ayarlar: tum gecmis (varsayilan acik), delta isaretleri (varsayilan acik)
+const ayarAcik = (k) => okuLS(k, "1") === "1";
+function ayarGrafik(){
+  yazLS("investingDelta", document.getElementById("ayDelta").checked ? "1" : "0");
+  yazLS("investingTumGecmis", document.getElementById("ayTum").checked ? "1" : "0");
+  eskiBitti = liste.every(x => coinTam[x.sym]);
+  grafikVeri();
+}
+
+// ---------------------------------------------------------------------------
+//  DELTA (sert alim / satim): Binance gercek taker verisi
+//  delta $ = (taker alis - taker satis) x kapanis ; z = son 100 muma gore standart sapma
+// ---------------------------------------------------------------------------
+const DZ_L = 100, DZ_ESIK = 3;
+let DELTA = {};                                   // sym -> { ts:[...], d:Map(t->$), z:Map(t->z) }
+function deltaHesapla(){
+  DELTA = {};
+  for (const x of liste) {
+    const m = mumlar[x.sym]; if (!m || !m.size) continue;
+    const ts = [...m.keys()].sort((a, b) => a - b), d = new Map(), z = new Map();
+    let s1 = 0, s2 = 0; const dz = ts.map(t => { const r = m.get(t); return (2 * r[5] - r[4]) * r[3]; });
+    for (let i = 0; i < ts.length; i++) {
+      d.set(ts[i], dz[i]);
+      if (i >= DZ_L) { const mu = s1 / DZ_L, sd = Math.sqrt(Math.max(s2 / DZ_L - mu * mu, 0)); z.set(ts[i], sd ? (dz[i] - mu) / sd : 0); }
+      s1 += dz[i]; s2 += dz[i] * dz[i];
+      if (i >= DZ_L) { s1 -= dz[i - DZ_L]; s2 -= dz[i - DZ_L] * dz[i - DZ_L]; }
+    }
+    DELTA[x.sym] = { ts, d, z };
+  }
+}
+// son KAPANAN mumun durumu (listede isaret, detayda bilgi)
+function deltaSon(sym){
+  const D = DELTA[sym]; if (!D || D.ts.length < 2) return null;
+  const kapali = D.ts.slice(0, -1);              // son mum hala aciliyor
+  const t = kapali[kapali.length - 1], z = D.z.get(t);
+  let sonAl = null;
+  for (let i = kapali.length - 1; i >= 0; i--) { if ((D.z.get(kapali[i]) ?? 0) >= DZ_ESIK) { sonAl = kapali.length - 1 - i; break; } }
+  return { z, sonAl };
+}
+function deltaIsaret(sym){
+  if (!ayarAcik("investingDelta")) return "";
+  const s = deltaSon(sym); if (!s || s.z == null) return "";
+  const z = s.z, zt = z.toFixed(1).replace(".", ",");
+  if (z >= DZ_ESIK)  return `<span class="dz al" title="Son kapanan mum: SERT ALIM (delta z=${zt})">▲</span>`;
+  if (z >= 1.5)      return `<span class="dz al2" title="Son kapanan mum: alıcılar güçlü (z=${zt})">▴</span>`;
+  if (z <= -DZ_ESIK) return `<span class="dz sat" title="Son kapanan mum: sert satış (z=${zt}) — tek başına SAT sinyali değil">▼</span>`;
+  if (z <= -1.5)     return `<span class="dz sat2" title="Son kapanan mum: satıcılar güçlü (z=${zt})">▾</span>`;
+  return "";
+}
+let deltaSeri = null;
+function deltaRenk(){ const k = tema === "kagit"; return { al: k ? "#35614a" : "#26a69a", sat: k ? "#8c3a31" : "#ef5350", gri: k ? "#696153" : "#787b86" }; }
+function deltaCiz(){
+  if (!chart) return;
+  const acik = ayarAcik("investingDelta"), R = deltaRenk(), isaretler = [];
+  if (!deltaSeri) {
+    deltaSeri = chart.addHistogramSeries({ priceScaleId: "delta", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
+    chart.priceScale("delta").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 }, visible: false });
+  }
+  const a = (c, op) => `rgba(${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)},${op})`;
+  if (acik && secili && DELTA[secili]) {
+    const D = DELTA[secili], sonT = D.ts[D.ts.length - 1];
+    deltaSeri.setData(D.ts.map(t => { const v = D.d.get(t), z = D.z.get(t) ?? 0;
+      return { time: t, value: v, color: v >= 0 ? (z >= DZ_ESIK ? R.al : a(R.al, .35)) : (z <= -DZ_ESIK ? R.sat : a(R.sat, .35)) }; }));
+    for (const t of D.ts) { if (t === sonT) continue; const z = D.z.get(t); if (z == null) continue;
+      if (z >= DZ_ESIK) isaretler.push({ time: t, position: "belowBar", shape: "arrowUp", color: R.al, text: "SERT AL" });
+      else if (z <= -DZ_ESIK) isaretler.push({ time: t, position: "aboveBar", shape: "circle", color: a(R.sat, .6), text: "s.satış", size: 0.5 }); }
+  } else {
+    deltaSeri.setData([]);
+    if (acik) {                                   // toplam: hangi coinde sert alim oldu
+      const kim = new Map();
+      for (const x of liste) { const D = DELTA[x.sym]; if (!D) continue; const sonT = D.ts[D.ts.length - 1];
+        for (const t of D.ts) if (t !== sonT && (D.z.get(t) ?? 0) >= DZ_ESIK) kim.set(t, [...(kim.get(t) || []), x.sym.replace(/USDT$|USDC$/, "")]); }
+      for (const [t, adlar] of kim) isaretler.push({ time: t, position: "belowBar", shape: "arrowUp", color: R.al, text: adlar.join(" ") });
+    }
+  }
+  return isaretler;
+}
+
 function grafikVeri(gorunumKoru){
   if (!mumSeri) return;
   const semboller = secili ? [secili] : liste.map(x => x.sym);
   const adet = Object.fromEntries(liste.map(x => [x.sym, x.adet]));
+  const tum = ayarAcik("investingTumGecmis");
+  // zaman listesi: tum gecmis = birlesim (coin listelendigi gunden itibaren), degilse kesisim (hepsinin oldugu donem)
   let zamanlar = null;
-  for (const s of semboller) { const z = new Set((mumlar[s] || new Map()).keys()); zamanlar = zamanlar ? new Set([...zamanlar].filter(t => z.has(t))) : z; }
+  for (const s of semboller) { const z = new Set((mumlar[s] || new Map()).keys());
+    zamanlar = !zamanlar ? z : (tum ? new Set([...zamanlar, ...z]) : new Set([...zamanlar].filter(t => z.has(t)))); }
   const tlist = [...(zamanlar || [])].sort((a, b) => a - b);
+  const ilk = {}; for (const s of semboller) { const m = mumlar[s]; ilk[s] = m && m.size ? Math.min(...m.keys()) : Infinity; }
   const n0 = secili ? 0 : nakit;                                   // toplam grafikte nakit de var (sabit)
-  const veri = tlist.map(t => {
-    let o = n0, h = n0, l = n0, c = n0;
-    for (const sym of semboller) { const [a, b, d, e] = mumlar[sym].get(t); const q = adet[sym]; o += a*q; h += b*q; l += d*q; c += e*q; }
-    return { time: t, open: o, high: h, low: l, close: c };
-  });
+  const sonK = {};
+  const veri = [];
+  for (const t of tlist) {
+    let o = n0, h = n0, l = n0, c = n0, var_ = false;
+    for (const sym of semboller) {
+      let r = mumlar[sym].get(t);
+      if (!r) { if (t < ilk[sym] || sonK[sym] == null) continue; const k = sonK[sym]; r = [k, k, k, k]; }   // ara bosluk: son fiyat
+      sonK[sym] = r[3]; const q = adet[sym]; o += r[0]*q; h += r[1]*q; l += r[2]*q; c += r[3]*q; var_ = true;
+    }
+    if (var_) veri.push({ time: t, open: o, high: h, low: l, close: c });
+  }
   // once son mum/ilk deger ayarlanir (gorunum degisince canliNokta eski periyodun mumunu yazmasin)
   son = veri.length ? { ...veri[veri.length - 1] } : null;
   const pn = PERIYOT.find(x => x.ad === periyot).n;               // degisim: gorunen ilk mumdan (kaydirinca guncellenir)
   ilkDeger = veri.length ? veri[Math.max(0, veri.length - pn)].open : null;
   mumSeri.setData(veri);
   cizgiSeri.setData(veri.map(v => ({ time: v.time, value: v.close })));
-  if (!gorunumKoru) { gorunumSifirla(); eskiBitti = false; }
+  // isaretler: sert alim/satim + toplamda coinin listelendigi gun
+  deltaHesapla();
+  const isaretler = deltaCiz() || [];
+  if (!secili && tum && veri.length) {
+    const R = deltaRenk();
+    for (const s of semboller) if (coinTam[s] && ilk[s] > veri[0].time && ilk[s] !== Infinity)
+      isaretler.push({ time: ilk[s], position: "aboveBar", shape: "circle", color: R.gri, text: "+" + s.replace(/USDT$|USDC$/, ""), size: 0.6 });
+  }
+  isaretler.sort((a, b) => a.time - b.time);
+  mumSeri.setMarkers(isaretler); cizgiSeri.setMarkers(isaretler);
+  if (!gorunumKoru) { gorunumSifirla(); eskiBitti = liste.every(x => coinTam[x.sym]); }
   document.getElementById("gAd").textContent = secili ? secili.replace(/USDT$|USDC$/, "") + " değeri" : "Portföy değeri";
-  canliNokta();
+  canliNokta(); ciz();
 }
 
 // canli fiyatla son mumu guncelle (yeni periyoda gecildiyse yeni mum ac)
@@ -827,6 +941,8 @@ setInterval(() => {
   else geceYukle().then(ciz);                                       // UTC gun degisince yeni gunun acilis fiyati
 }, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) anlik(); });
+document.getElementById("ayDelta").checked = ayarAcik("investingDelta");
+document.getElementById("ayTum").checked = ayarAcik("investingTumGecmis");
 temaUygula();
 baslat().then(senkron);
 </script>
