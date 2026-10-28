@@ -63,6 +63,7 @@ a{color:var(--mavi)}
 .toplam .eur{font-size:12px;color:var(--gri)}
 .bosluk{flex:1}
 .grup{display:flex;gap:2px;background:var(--panel);border-radius:6px;padding:2px}
+.grup button svg{width:12px;height:14px;vertical-align:-2px;margin-right:4px}
 .grup button{border:0;background:none;color:var(--gri);padding:5px 9px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600}
 .grup button:hover{color:var(--yazi);background:var(--hover)}
 .grup button.sec{color:var(--yazi);background:var(--hover)}
@@ -179,6 +180,7 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
       <span class="eur r" id="topEur"></span>
     </div>
     <div class="bosluk"></div>
+    <div class="grup" id="modGrup"></div>
     <div class="grup" id="tipGrup"></div>
     <div class="grup" id="periyot"></div>
     <button class="ikonBtn" id="temaBtn" onclick="temaDegis()" title="Tema">◐</button>
@@ -498,7 +500,35 @@ let secili = null;
 let mumlar = {};                                  // sym -> Map(zaman -> [o,h,l,c])
 let chart = null, mumSeri = null, cizgiSeri = null, son = null, ilkDeger = null;
 
+// ---------------------------------------------------------------------------
+//  KLASIK (zaman) / TICK (islem sayisi) grafik
+// ---------------------------------------------------------------------------
+let mod = okuLS("investingMod", "klasik"); if (mod !== "tick") mod = "klasik";
+const TICK_PENCERE = [
+  { ad:"1sa", uzun:"son 1 saat", dk:60,   iv:"1s", adim:1000 },    // 1 saniyelik mumlardan
+  { ad:"4sa", uzun:"son 4 saat", dk:240,  iv:"1s", adim:1000 },
+  { ad:"1G",  uzun:"son 1 gün",  dk:1440, iv:"1m", adim:60000 },   // 1 dakikalik mumlardan
+];
+let tickPencere = okuLS("investingTickPencere", "4sa"); if (!TICK_PENCERE.some(p => p.ad === tickPencere)) tickPencere = "4sa";
+let tickHam = {}, tickBoyut = 0;
+const SVG_KLASIK = '<svg viewBox="0 0 12 14"><line x1="3" y1="1" x2="3" y2="13" stroke="currentColor"/><rect x="1" y="4" width="4" height="6" fill="currentColor"/><line x1="9" y1="0" x2="9" y2="11" stroke="currentColor"/><rect x="7" y="2" width="4" height="6" fill="none" stroke="currentColor"/></svg>';
+const SVG_TICK = '<svg viewBox="0 0 12 14"><line x1="2" y1="3" x2="2" y2="11" stroke="currentColor"/><rect x="1" y="5" width="2" height="4" fill="currentColor"/><line x1="6" y1="1" x2="6" y2="9" stroke="currentColor"/><rect x="5" y="3" width="2" height="4" fill="currentColor"/><line x1="10" y1="4" x2="10" y2="13" stroke="currentColor"/><rect x="9" y="6" width="2" height="5" fill="currentColor"/></svg>';
+function modSec(m){ mod = m; yazLS("investingMod", m); periyotCiz(); grafikYukle(); }
+function tickPencereSec(ad){ tickPencere = ad; yazLS("investingTickPencere", ad); periyotCiz(); grafikYukle(); }
+
 function periyotCiz(){
+  document.getElementById("modGrup").innerHTML =
+    `<button class="${mod==="klasik"?"sec":""}" onclick="modSec('klasik')" title="Klasik: her mum belli bir süre">${SVG_KLASIK}Klasik</button>` +
+    `<button class="${mod==="tick"?"sec":""}" onclick="modSec('tick')" title="Tick: her mum belli sayıda işlem">${SVG_TICK}Tick</button>`;
+  if (mod === "tick") {
+    document.getElementById("tipGrup").innerHTML =
+      `<button class="${tip==="mum"?"sec":""}" onclick="tipSec('mum')" title="Mum grafiği">Mum</button>` +
+      `<button class="${tip==="cizgi"?"sec":""}" onclick="tipSec('cizgi')" title="Çizgi grafiği">Çizgi</button>`;
+    document.getElementById("periyot").innerHTML =
+      TICK_PENCERE.map(p => `<button class="${p.ad===tickPencere?"sec":""}" onclick="tickPencereSec('${p.ad}')" title="Tick grafik: ${p.uzun} işlemleri">${p.ad}</button>`).join("");
+    document.getElementById("gPer").textContent = "· tick · " + TICK_PENCERE.find(p => p.ad === tickPencere).uzun + (tickBoyut ? " · 1 mum ≈ " + tickBoyut.toLocaleString("fr-FR") + " işlem" : "");
+    return;
+  }
   document.getElementById("tipGrup").innerHTML =
     `<button class="${tip==="mum"?"sec":""}" onclick="tipSec('mum')" title="Mum grafiği">Mum</button>` +
     `<button class="${tip==="cizgi"?"sec":""}" onclick="tipSec('cizgi')" title="Çizgi grafiği">Çizgi</button>`;
@@ -586,6 +616,7 @@ function grafikKur(){
 
 async function grafikYukle(){
   grafikKur(); if (!chart || !liste.length) return;
+  if (mod === "tick") return tickYukle();
   const p = PERIYOT.find(x => x.ad === periyot);
   document.getElementById("gDegisim").textContent = "yükleniyor…";
   try {
@@ -610,7 +641,7 @@ let eskiYukleniyor = false, eskiBitti = false, coinTam = {};
 // Binance mumu -> [acilis, tepe, dip, kapanis, hacim, taker alis hacmi]
 const mumDiz = k => [+k[1], +k[2], +k[3], +k[4], +k[5], +k[9]];
 async function eskiYukle(){
-  if (eskiYukleniyor || eskiBitti || !mumSeri || !liste.length) return;
+  if (mod === "tick" || eskiYukleniyor || eskiBitti || !mumSeri || !liste.length) return;
   eskiYukleniyor = true;
   const p = PERIYOT.find(x => x.ad === periyot), iv = p.iv;
   try {
@@ -714,6 +745,7 @@ function deltaCiz(){
 
 function grafikVeri(gorunumKoru){
   if (!mumSeri) return;
+  if (mod === "tick") return tickVeri(gorunumKoru);
   const semboller = secili ? [secili] : liste.map(x => x.sym);
   const adet = Object.fromEntries(liste.map(x => [x.sym, x.adet]));
   const tum = ayarAcik("investingTumGecmis");
@@ -756,6 +788,76 @@ function grafikVeri(gorunumKoru){
   canliNokta(); ciz();
 }
 
+// ---------------------------------------------------------------------------
+//  TICK GRAFIK: Binance'in 1 saniyelik (1 saat / 4 saat) ya da 1 dakikalik (1 gun) mumlarindaki ISLEM SAYISI ile.
+//  Kucuk mumlar sirayla toplanir; toplam islem sayisi esige (1 mum = N islem) ulasinca tick mumu kapanir.
+//  En kucuk adim 1 saniye / 1 dakika — her islemi tek tek indirmekten cok daha hizli.
+// ---------------------------------------------------------------------------
+async function tickYukle(gorunumKoru){
+  const pw = TICK_PENCERE.find(p => p.ad === tickPencere), bitis = Date.now(), bas = bitis - pw.dk * 60000;
+  if (!gorunumKoru) document.getElementById("gDegisim").textContent = "yükleniyor…";
+  try {
+    const coinIndir = async sym => {
+      let rows = [], t = bas;
+      while (t < bitis) {
+        const k = await (await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${pw.iv}&limit=1000&startTime=${t}`)).json();
+        if (!Array.isArray(k) || !k.length) break;
+        rows = rows.concat(k.map(x => [x[0] / 1000, +x[1], +x[2], +x[3], +x[4], +x[8]]));   // [zaman, a, y, d, k, islem sayisi]
+        if (k.length < 1000) break; t = k[k.length - 1][0] + pw.adim;
+      }
+      return rows;
+    };
+    const sonuc = await Promise.all(liste.map(x => coinIndir(x.sym)));
+    if (mod !== "tick") return;
+    tickHam = {}; liste.forEach((x, i) => tickHam[x.sym] = sonuc[i]);
+    tickVeri(gorunumKoru);
+  } catch (e) { document.getElementById("gDegisim").textContent = "Tick verisi alınamadı"; }
+}
+function tickVeri(gorunumKoru){
+  if (!mumSeri) return;
+  const semboller = secili ? [secili] : liste.map(x => x.sym);
+  const adet = Object.fromEntries(liste.map(x => [x.sym, x.adet]));
+  const harita = {}, zaman = new Set();
+  for (const s of semboller) { harita[s] = new Map((tickHam[s] || []).map(r => [r[0], r])); for (const r of (tickHam[s] || [])) zaman.add(r[0]); }
+  const tl = [...zaman].sort((a, b) => a - b), n0 = secili ? 0 : nakit, sonK = {};
+  // dakika dakika portfoy degeri + toplam islem sayisi
+  const dk = [];
+  for (const t of tl) {
+    let o = n0, h = n0, l = n0, c = n0, n = 0, var_ = false;
+    for (const s of semboller) {
+      let r = harita[s].get(t);
+      if (!r) { if (sonK[s] == null) continue; const k = sonK[s]; r = [t, k, k, k, k, 0]; }
+      sonK[s] = r[4]; const q = adet[s]; o += r[1]*q; h += r[2]*q; l += r[3]*q; c += r[4]*q; n += r[5]; var_ = true;
+    }
+    if (var_) dk.push({ t, o, h, l, c, n });
+  }
+  // mum basina islem sayisi: ~200 mum olacak sekilde yuvarlak bir sayi
+  const toplamN = dk.reduce((a, x) => a + x.n, 0);
+  const YUVARLAK = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000];
+  const hedef = toplamN / 200;
+  tickBoyut = YUVARLAK.reduce((en, v) => Math.abs(Math.log(v / hedef)) < Math.abs(Math.log(en / hedef)) ? v : en, YUVARLAK[0]);
+  const veri = []; let cur = null, acc = 0;
+  for (const m of dk) {
+    if (!cur) cur = { time: m.t, open: m.o, high: m.h, low: m.l, close: m.c };
+    else { cur.high = Math.max(cur.high, m.h); cur.low = Math.min(cur.low, m.l); cur.close = m.c; }
+    acc += m.n;
+    if (acc >= tickBoyut) { veri.push(cur); cur = null; acc = 0; }
+  }
+  if (cur) veri.push(cur);                                         // son mum: islem sayisi dolmadi, hala aciliyor
+  son = veri.length ? { ...veri[veri.length - 1] } : null;
+  ilkDeger = veri.length ? veri[0].open : null;
+  mumSeri.setData(veri);
+  cizgiSeri.setData(veri.map(v => ({ time: v.time, value: v.close })));
+  mumSeri.setMarkers([]); cizgiSeri.setMarkers([]);
+  if (deltaSeri) deltaSeri.setData([]);
+  if (!gorunumKoru) { gorunumSifirla(); chart.timeScale().fitContent(); }
+  document.getElementById("gAd").textContent = secili ? secili.replace(/USDT$|USDC$/, "") + " değeri" : "Portföy değeri";
+  periyotCiz();
+  canliNokta(); ciz();
+}
+// tick modunda dakikada bir yenile (yeni islemler yeni mum acar)
+setInterval(() => { if (mod === "tick" && !document.hidden && liste.length) tickYukle(true); }, 60000);
+
 // canli fiyatla son mumu guncelle (yeni periyoda gecildiyse yeni mum ac)
 function canliNokta(){
   if (!mumSeri || !son || ilkDeger == null) return;
@@ -764,7 +866,7 @@ function canliNokta(){
   const deger = semboller.reduce((s, sym) => s + fiyat[sym] * liste.find(x => x.sym === sym).adet, secili ? 0 : nakit);
   const p = PERIYOT.find(x => x.ad === periyot);
   const simdi = Math.floor(Date.now() / 1000);
-  if (simdi >= mumBitis(son.time, p)) {
+  if (mod !== "tick" && simdi >= mumBitis(son.time, p)) {
     let t = mumBitis(son.time, p); while (mumBitis(t, p) <= simdi) t = mumBitis(t, p);
     son = { time: t, open: son.close, high: Math.max(son.close, deger), low: Math.min(son.close, deger), close: deger };
   } else {
