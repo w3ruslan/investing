@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#fcf0d9">
+<meta name="theme-color" content="#a3a6b0">
 <meta name="robots" content="noindex">
 <title>Investing</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -21,6 +21,13 @@
   --yesA:rgba(8,153,129,.12); --kirA:rgba(242,54,69,.12); --golge:rgba(19,23,34,.18);
 }
 /* e-kagit (e-ink): kagit zemin, murekkep yazi, renkler cok soluk */
+/* arduvaz (kullanicinin grafiginden olculen: mavi-gri zemin, koyu yesil / bordo mumlar) */
+[data-tema="arduvaz"]{
+  --bg:#a3a6b0; --panel:#9a9da8; --panel2:#a3a6b0; --cizgi:#878a96; --hover:#979aa5; --sec:#8e919d;
+  --yazi:#15171c; --gri:#373a43; --acik:#686c77; --mavi:#1f2f4f; --yes:#184e18; --kir:#6b0e1a;
+  --yesA:rgba(24,78,24,.18); --kirA:rgba(107,14,26,.16); --golge:rgba(21,23,28,.25);
+}
+[data-tema="arduvaz"] .ust,[data-tema="arduvaz"] .yan{background:transparent}
 /* krem (kullanicinin TradingView grafiginden olculen renkler) */
 [data-tema="krem"]{
   --bg:#fcf0d9; --panel:#f6e8cd; --panel2:#fcf0d9; --cizgi:#e6d6b8; --hover:#f3e3c4; --sec:#ecdab8;
@@ -231,9 +238,9 @@ textarea{width:100%;min-height:80px;margin-top:8px;padding:8px;border:1px solid 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 const LS = "investingFormul", LS_T = "investingZaman", LS_PIN = "investingPin";
-const TEMALAR = { krem:{ ad:"Krem", bg:"#fcf0d9" }, kagit:{ ad:"E-kağıt", bg:"#ebe9e3" }, koyu:{ ad:"Koyu", bg:"#131722" }, acik:{ ad:"Açık", bg:"#ffffff" } };
-let tema = (()=>{ try { return localStorage.getItem("investingTemaV3") || "krem"; } catch(e){ return "krem"; } })();
-if (!TEMALAR[tema]) tema = "krem";
+const TEMALAR = { arduvaz:{ ad:"Arduvaz", bg:"#a3a6b0" }, krem:{ ad:"Krem", bg:"#fcf0d9" }, kagit:{ ad:"E-kağıt", bg:"#ebe9e3" }, koyu:{ ad:"Koyu", bg:"#131722" }, acik:{ ad:"Açık", bg:"#ffffff" } };
+let tema = (()=>{ try { return localStorage.getItem("investingTemaV4") || "arduvaz"; } catch(e){ return "arduvaz"; } })();
+if (!TEMALAR[tema]) tema = "arduvaz";
 // e-kagit tonu (HSL): varsayilan, e-okuyucu fotografindan olculen renk
 const KAGIT_HAZIR = { kobo:{ h:38, s:23, l:79 }, koyu:{ h:35, s:27, l:48 }, acik:{ h:45, s:17, l:90 } };
 let kagit = (()=>{ try { const k = JSON.parse(localStorage.getItem("investingKagit2") || "null"); if (k && k.l) return k; } catch(e){} return { ...KAGIT_HAZIR.kobo }; })();
@@ -259,7 +266,7 @@ function kagitUygula(){
 function kagitDegis(){
   kagit = { ...kagit, l: +document.getElementById("kL").value, s: +document.getElementById("kS").value };
   try { localStorage.setItem("investingKagit2", JSON.stringify(kagit)); } catch(e){}
-  if (tema !== "kagit") { tema = "kagit"; try { localStorage.setItem("investingTemaV3", tema); } catch(e){} }
+  if (tema !== "kagit") { tema = "kagit"; try { localStorage.setItem("investingTemaV4", tema); } catch(e){} }
   temaUygula();
 }
 function kagitHazir(ad){ kagit = { ...KAGIT_HAZIR[ad] }; try { localStorage.setItem("investingKagit2", JSON.stringify(kagit)); } catch(e){} if (tema !== "kagit") tema = "kagit"; temaUygula(); }
@@ -273,7 +280,7 @@ function temaUygula(){
 }
 function temaDegis(){
   const sira = Object.keys(TEMALAR); tema = sira[(sira.indexOf(tema) + 1) % sira.length];
-  try { localStorage.setItem("investingTemaV3", tema); } catch(e){} temaUygula();
+  try { localStorage.setItem("investingTemaV4", tema); } catch(e){} temaUygula();
 }
 const WORKER = "https://kasa-data.w3ruslan-8c5.workers.dev/?f=investing";
 const fmtUsd = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"USD", currencyDisplay:"narrowSymbol", maximumFractionDigits:0 });
@@ -510,6 +517,9 @@ function secimYap(sym){ secili = sym; document.getElementById("geri").style.disp
 function grafikRenk(){
   if (!chart) return;
   const R = {
+    arduvaz: { bg:"#a3a6b0", yazi:"#1f2228", izgara:"#9a9da8", cz:"#3f434c", etiket:"#1f2228",
+             mum:{ upColor:"#184e18", downColor:"#6b0e1a", borderUpColor:"#184e18", borderDownColor:"#6b0e1a", wickUpColor:"#184e18", wickDownColor:"#6b0e1a" },
+             cizgi:{ lineColor:"#1f2228", topColor:"rgba(31,34,40,.16)", bottomColor:"rgba(31,34,40,0)" } },
     krem:  { bg:"#fcf0d9", yazi:"#496298", izgara:"#efe2c8", cz:"#888a89", etiket:"#496298",
              mum:{ upColor:"#a1a28d", downColor:"#8f6e79", borderUpColor:"#a1a28d", borderDownColor:"#8f6e79", wickUpColor:"#a1a28d", wickDownColor:"#8f6e79" },
              cizgi:{ lineColor:"#496298", topColor:"rgba(73,98,152,.16)", bottomColor:"rgba(73,98,152,0)" } },
@@ -671,6 +681,7 @@ function deltaIsaret(sym){
 }
 let deltaSeri = null;
 function deltaRenk(){
+  if (tema === "arduvaz") return { al: "#184e18", sat: "#6b0e1a", gri: "#373a43" };
   if (tema === "krem") return { al: "#6f7a55", sat: "#8f5a6a", gri: "#6a6f80" };
   const k = tema === "kagit"; return { al: k ? "#35614a" : "#26a69a", sat: k ? "#8c3a31" : "#ef5350", gri: k ? "#696153" : "#787b86" };
 }
